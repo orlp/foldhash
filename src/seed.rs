@@ -1,6 +1,9 @@
 use core::cell::UnsafeCell;
 use core::hash::BuildHasher;
-use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU8, Ordering};
+
+#[allow(unused)]
+use super::ARBITRARY1;
 
 use super::{
     folded_multiply, ARBITRARY2, ARBITRARY3, ARBITRARY4, ARBITRARY5, ARBITRARY6, ARBITRARY7,
@@ -20,28 +23,47 @@ pub mod fast {
 
     impl Default for RandomState {
         fn default() -> Self {
-            // We use our current stack address in combination with
-            // PER_HASHER_NONDETERMINISM to create a new value that is very likely
-            // to have never been used as a random state before.
+            let per_hasher_seed;
+
+            // If we have the standard library available we use a thread-local
+            // counter for the per-hasher seed.
+            #[cfg(feature = "std")]
+            {
+                use std::cell::Cell;
+                thread_local! {
+                    static PER_HASHER_NONDETERMINISM: Cell<u64> = const { Cell::new(0) };
+                }
+
+                let mut nondeterminism = PER_HASHER_NONDETERMINISM.get();
+                nondeterminism = nondeterminism.wrapping_add(ARBITRARY1 | 1); // Ensure number is odd for maximum period.
+                PER_HASHER_NONDETERMINISM.set(nondeterminism);
+                per_hasher_seed = folded_multiply(nondeterminism, ARBITRARY2);
+            };
+
+            // If we don't have the standard library we use our current stack
+            // address in combination with a global PER_HASHER_NONDETERMINISM to
+            // create a new value that is very likely to have never been used as
+            // a random state before.
             //
-            // PER_HASHER_NONDETERMINISM ensures that even if we create two
-            // RandomStates with the same stack location it is still highly unlikely
-            // you'll end up with the same random seed.
-            //
-            // PER_HASHER_NONDETERMINISM is loaded and updated in a racy manner, but
-            // this doesn't matter in practice - it is impossible that two different
-            // threads have the same stack location, so they'll almost surely
-            // generate different seeds, and provide a different possible update for
-            // PER_HASHER_NONDETERMINISM. If we would use a proper atomic update
-            // then hash table creation would have a global contention point, which
-            // users could not avoid.
+            // PER_HASHER_NONDETERMINISM is loaded and updated in a racy manner,
+            // but this doesn't matter in practice - it is impossible that two
+            // different threads have the same stack location, so they'll almost
+            // surely generate different seeds, and provide a different possible
+            // update for PER_HASHER_NONDETERMINISM. If we would use a proper
+            // fetch_add atomic update then there is a larger chance of
+            // problematic contention.
             //
             // Finally, not all platforms have a 64-bit atomic, so we use usize.
-            static PER_HASHER_NONDETERMINISM: AtomicUsize = AtomicUsize::new(0);
-            let nondeterminism = PER_HASHER_NONDETERMINISM.load(Ordering::Relaxed) as u64;
-            let stack_ptr = &nondeterminism as *const _ as u64;
-            let per_hasher_seed = folded_multiply(nondeterminism ^ stack_ptr, ARBITRARY2);
-            PER_HASHER_NONDETERMINISM.store(per_hasher_seed as usize, Ordering::Relaxed);
+            #[cfg(not(feature = "std"))]
+            {
+                use core::sync::atomic::AtomicUsize;
+                static PER_HASHER_NONDETERMINISM: AtomicUsize = AtomicUsize::new(0);
+
+                let nondeterminism = PER_HASHER_NONDETERMINISM.load(Ordering::Relaxed) as u64;
+                let stack_ptr = &nondeterminism as *const _ as u64;
+                per_hasher_seed = folded_multiply(nondeterminism ^ stack_ptr, ARBITRARY2);
+                PER_HASHER_NONDETERMINISM.store(per_hasher_seed as usize, Ordering::Relaxed);
+            }
 
             Self {
                 per_hasher_seed,
@@ -263,7 +285,7 @@ impl GlobalSeed {
 
                 Err(INIT) => return,
 
-                // Yes, it's a spin loop. We are a no_std crate (so no easy
+                // Yes, it's a spin loop. We need to support no_std (so no easy
                 // access to proper locks), this is a one-time-per-program
                 // initialization, and the critical section is only a few
                 // store instructions, so it'll be fine.

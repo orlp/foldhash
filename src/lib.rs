@@ -95,15 +95,16 @@ mod seed;
 pub use convenience::*;
 
 // Arbitrary constants with high entropy. Hexadecimal digits of pi were used.
-const ARBITRARY1: u64 = 0x243f6a8885a308d3;
-const ARBITRARY2: u64 = 0x13198a2e03707344;
-const ARBITRARY3: u64 = 0xa4093822299f31d0;
-const ARBITRARY4: u64 = 0x082efa98ec4e6c89;
-const ARBITRARY5: u64 = 0x452821e638d01377;
-const ARBITRARY6: u64 = 0xbe5466cf34e90c6c;
-const ARBITRARY7: u64 = 0xc0ac29b7c97c50dd;
-const ARBITRARY8: u64 = 0x3f84d5b5b5470917;
-const ARBITRARY9: u64 = 0x9216d5d98979fb1b;
+const ARBITRARY0: u64 = 0x243f6a8885a308d3;
+const ARBITRARY1: u64 = 0x13198a2e03707344;
+const ARBITRARY2: u64 = 0xa4093822299f31d0;
+const ARBITRARY3: u64 = 0x082efa98ec4e6c89;
+const ARBITRARY4: u64 = 0x452821e638d01377;
+const ARBITRARY5: u64 = 0xbe5466cf34e90c6c;
+const ARBITRARY6: u64 = 0xc0ac29b7c97c50dd;
+const ARBITRARY7: u64 = 0x3f84d5b5b5470917;
+const ARBITRARY8: u64 = 0x9216d5d98979fb1b;
+const ARBITRARY9: u64 = 0xd1310ba698dfb5ac;
 
 #[inline(always)]
 const fn folded_multiply(x: u64, y: u64) -> u64 {
@@ -327,7 +328,7 @@ pub mod quality {
 
         #[inline(always)]
         fn finish(&self) -> u64 {
-            folded_multiply(self.inner.finish(), ARBITRARY1)
+            folded_multiply(self.inner.finish(), ARBITRARY0)
         }
     }
 }
