@@ -56,7 +56,7 @@ pub mod fast {
             // problematic contention.
             //
             // We use usize instead of 64-bit atomics for best platform support.
-            #[cfg(all(not(feature = "std"), target_has_atomic = "ptr"))]
+            #[cfg(not(feature = "std"))]
             {
                 use core::sync::atomic::{AtomicUsize, Ordering};
                 static PER_HASHER_NONDETERMINISM: AtomicUsize = AtomicUsize::new(0);
@@ -65,14 +65,6 @@ pub mod fast {
                 let stack_ptr = &nondeterminism as *const _ as u64;
                 per_hasher_seed = folded_multiply(nondeterminism ^ stack_ptr, ARBITRARY2);
                 PER_HASHER_NONDETERMINISM.store(per_hasher_seed as usize, Ordering::Relaxed);
-            }
-
-            // Finally, if we have neither std or atomics we only use the stack pointer.
-            #[cfg(all(not(feature = "std"), not(target_has_atomic = "ptr")))]
-            {
-                let dummy = 0;
-                let stack_ptr = &dummy as *const _ as u64;
-                per_hasher_seed = folded_multiply(stack_ptr, ARBITRARY2);
             }
 
             Self {
