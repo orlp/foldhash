@@ -195,12 +195,9 @@ mod global {
         #[cfg(feature = "std")]
         {
             #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
-            {
-                let now = std::time::SystemTime::now();
-                if let Ok(duration) = now.duration_since(std::time::UNIX_EPOCH) {
-                    seed = mix(seed, duration.subsec_nanos() as u64);
-                    seed = mix(seed, duration.as_secs());
-                }
+            if let Ok(duration) = std::time::UNIX_EPOCH.elapsed() {
+                seed = mix(seed, duration.subsec_nanos() as u64);
+                seed = mix(seed, duration.as_secs());
             }
 
             let box_ptr = &*Box::new(0u8) as *const _;
