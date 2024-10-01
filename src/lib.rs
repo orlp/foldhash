@@ -85,7 +85,7 @@
 #![cfg_attr(all(not(test), not(feature = "std")), no_std)]
 #![warn(missing_docs)]
 
-use core::hash::Hasher;
+use core::hash::{BuildHasher, Hasher};
 
 #[cfg(feature = "std")]
 mod convenience;
@@ -274,6 +274,13 @@ pub mod fast {
             }
         }
     }
+
+    impl Default for FoldHasher {
+        #[inline]
+        fn default() -> Self {
+            FixedState::default().build_hasher()
+        }
+    }
 }
 
 /// The foldhash implementation optimized for quality.
@@ -329,6 +336,13 @@ pub mod quality {
         #[inline(always)]
         fn finish(&self) -> u64 {
             folded_multiply(self.inner.finish(), ARBITRARY0)
+        }
+    }
+
+    impl Default for FoldHasher {
+        #[inline]
+        fn default() -> Self {
+            FixedState::default().build_hasher()
         }
     }
 }
