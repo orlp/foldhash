@@ -194,11 +194,14 @@ mod global {
         // current time and an address from the allocator.
         #[cfg(feature = "std")]
         {
-            let now = std::time::SystemTime::now();
-            if let Ok(duration) = now.duration_since(std::time::UNIX_EPOCH) {
-                let ns = duration.as_nanos();
-                seed = mix(seed, ns as u64);
-                seed = mix(seed, (ns >> 64) as u64);
+            #[cfg(not(all(target_family = "wasm", target_os = "unknown")))]
+            {
+                let now = std::time::SystemTime::now();
+                if let Ok(duration) = now.duration_since(std::time::UNIX_EPOCH) {
+                    let ns = duration.as_nanos();
+                    seed = mix(seed, ns as u64);
+                    seed = mix(seed, (ns >> 64) as u64);
+                }
             }
 
             let box_ptr = &*Box::new(0u8) as *const _;
