@@ -198,9 +198,8 @@ mod global {
             {
                 let now = std::time::SystemTime::now();
                 if let Ok(duration) = now.duration_since(std::time::UNIX_EPOCH) {
-                    let ns = duration.as_nanos();
-                    seed = mix(seed, ns as u64);
-                    seed = mix(seed, (ns >> 64) as u64);
+                    seed = mix(seed, duration.subsec_nanos() as u64);
+                    seed = mix(seed, duration.as_secs());
                 }
             }
 
