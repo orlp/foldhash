@@ -194,7 +194,11 @@ mod global {
         // current time and an address from the allocator.
         #[cfg(feature = "std")]
         {
-            #[cfg(not(any(miri, all(target_family = "wasm", target_os = "unknown"))))]
+            #[cfg(not(any(
+                miri,
+                all(target_family = "wasm", target_os = "unknown"),
+                target_os = "zkvm"
+            )))]
             if let Ok(duration) = std::time::UNIX_EPOCH.elapsed() {
                 seed = mix(seed, duration.subsec_nanos() as u64);
                 seed = mix(seed, duration.as_secs());
