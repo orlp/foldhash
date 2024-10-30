@@ -163,6 +163,7 @@ pub mod fast {
     }
 
     impl FoldHasher {
+        #[inline]
         pub(crate) fn with_seed(per_hasher_seed: u64, global_seed: &[u64; 4]) -> FoldHasher {
             FoldHasher {
                 accumulator: per_hasher_seed,

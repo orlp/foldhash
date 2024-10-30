@@ -77,6 +77,7 @@ pub mod fast {
     impl BuildHasher for RandomState {
         type Hasher = FoldHasher;
 
+        #[inline(always)]
         fn build_hasher(&self) -> FoldHasher {
             FoldHasher::with_seed(self.per_hasher_seed, self.global_seed.get())
         }
@@ -92,6 +93,7 @@ pub mod fast {
 
     impl FixedState {
         /// Creates a [`FixedState`] with the given seed.
+        #[inline(always)]
         pub const fn with_seed(seed: u64) -> Self {
             // XOR with ARBITRARY3 such that with_seed(0) matches default.
             Self {
@@ -101,6 +103,7 @@ pub mod fast {
     }
 
     impl Default for FixedState {
+        #[inline(always)]
         fn default() -> Self {
             Self {
                 per_hasher_seed: ARBITRARY3,
@@ -111,6 +114,7 @@ pub mod fast {
     impl BuildHasher for FixedState {
         type Hasher = FoldHasher;
 
+        #[inline(always)]
         fn build_hasher(&self) -> FoldHasher {
             FoldHasher::with_seed(self.per_hasher_seed, &FIXED_GLOBAL_SEED)
         }
@@ -130,6 +134,7 @@ pub mod quality {
     impl BuildHasher for RandomState {
         type Hasher = FoldHasher;
 
+        #[inline(always)]
         fn build_hasher(&self) -> FoldHasher {
             FoldHasher {
                 inner: self.inner.build_hasher(),
@@ -147,6 +152,7 @@ pub mod quality {
 
     impl FixedState {
         /// Creates a [`FixedState`] with the given seed.
+        #[inline(always)]
         pub const fn with_seed(seed: u64) -> Self {
             Self {
                 // We do an additional folded multiply with the seed here for
@@ -161,6 +167,7 @@ pub mod quality {
     impl BuildHasher for FixedState {
         type Hasher = FoldHasher;
 
+        #[inline(always)]
         fn build_hasher(&self) -> FoldHasher {
             FoldHasher {
                 inner: self.inner.build_hasher(),
