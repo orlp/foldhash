@@ -70,7 +70,7 @@ pub mod fast {
             }
 
             // One extra mixing step to ensure good random bits.
-            per_hasher_seed = folded_multiply(per_hasher_seed, ARBITRARY1);
+            per_hasher_seed = folded_multiply(per_hasher_seed, ARBITRARY2);
 
             Self {
                 per_hasher_seed,
