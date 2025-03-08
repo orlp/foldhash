@@ -195,9 +195,23 @@ pub mod fast {
     impl Hasher for FoldHasher {
         #[inline(always)]
         fn write(&mut self, bytes: &[u8]) {
+            // We perform overlapping reads in the byte hash which could lead to
+            // trivial length-extension attacks. These should be defeated by
+            // adding a length-dependent rotation on our unpredictable seed
+            // which costs only a single cycle (or none if executed with
+            // instruction-level parallelism).
             let len = bytes.len();
+            #[cfg(target_pointer_width = "64")]
+            let base_seed = self.accumulator.rotate_right(len as u32);
+            #[cfg(target_pointer_width = "32")]
+            let base_seed = {
+                let lo = (self.accumulator as u32).rotate_right(len as u32);
+                let hi = ((self.accumulator >> 32) as u32).rotate_right(len as u32);
+                ((hi as u64) << 32) | lo as u64
+            };
+
             if len <= 16 {
-                let mut s0 = self.accumulator;
+                let mut s0 = base_seed;
                 let mut s1 = self.expand_seed;
                 // XOR the input into s0, s1, then multiply and fold.
                 if len >= 8 {
@@ -217,17 +231,17 @@ pub mod fast {
             } else if len < 256 {
                 self.accumulator = hash_bytes_medium(
                     bytes,
-                    self.accumulator,
-                    self.accumulator.wrapping_add(self.expand_seed),
+                    base_seed,
+                    base_seed.wrapping_add(self.expand_seed),
                     self.fold_seed,
                 );
             } else {
                 self.accumulator = hash_bytes_long(
                     bytes,
-                    self.accumulator,
-                    self.accumulator.wrapping_add(self.expand_seed),
-                    self.accumulator.wrapping_add(self.expand_seed2),
-                    self.accumulator.wrapping_add(self.expand_seed3),
+                    base_seed,
+                    base_seed.wrapping_add(self.expand_seed),
+                    base_seed.wrapping_add(self.expand_seed2),
+                    base_seed.wrapping_add(self.expand_seed3),
                     self.fold_seed,
                 );
             }
