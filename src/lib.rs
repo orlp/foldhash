@@ -172,6 +172,33 @@ const fn folded_multiply(x: u64, y: u64) -> u64 {
     }
 }
 
+#[inline(always)]
+const fn rotate_right(x: u64, r: u32) -> u64 {
+    #[cfg(any(
+        target_pointer_width = "64",
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_family = "wasm",
+    ))]
+    {
+        x.rotate_right(r)
+    }
+
+    #[cfg(not(any(
+        target_pointer_width = "64",
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        target_family = "wasm",
+    )))]
+    {
+        // On platforms without 64-bit arithmetic rotation can be slow, rotate
+        // each 32-bit half independently.
+        let lo = (x as u32).rotate_right(r);
+        let hi = ((x >> 32) as u32).rotate_right(r);
+        ((hi as u64) << 32) | lo as u64
+    }
+}
+
 /// The foldhash implementation optimized for speed.
 pub mod fast {
     use super::*;
@@ -231,15 +258,7 @@ pub mod fast {
             // which costs only a single cycle (or none if executed with
             // instruction-level parallelism).
             let len = bytes.len();
-            #[cfg(target_pointer_width = "64")]
-            let base_seed = self.accumulator.rotate_right(len as u32);
-            #[cfg(target_pointer_width = "32")]
-            let base_seed = {
-                let lo = (self.accumulator as u32).rotate_right(len as u32);
-                let hi = ((self.accumulator >> 32) as u32).rotate_right(len as u32);
-                ((hi as u64) << 32) | lo as u64
-            };
-
+            let base_seed = rotate_right(self.accumulator, len as u32);
             if len <= 16 {
                 let mut s0 = base_seed;
                 let mut s1 = self.expand_seed;
