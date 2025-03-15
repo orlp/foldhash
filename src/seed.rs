@@ -42,9 +42,11 @@ pub mod fast {
                     static PER_HASHER_NONDETERMINISM: Cell<u64> = const { Cell::new(0) };
                 }
 
-                let nondeterminism = PER_HASHER_NONDETERMINISM.get();
-                per_hasher_seed = folded_multiply(per_hasher_seed, ARBITRARY1 ^ nondeterminism);
-                PER_HASHER_NONDETERMINISM.set(per_hasher_seed);
+                PER_HASHER_NONDETERMINISM.with(|cell| {
+                    let nondeterminism = cell.get();
+                    per_hasher_seed = folded_multiply(per_hasher_seed, ARBITRARY1 ^ nondeterminism);
+                    cell.set(per_hasher_seed);
+                })
             };
 
             // If we don't have the standard library we instead use a global
@@ -293,7 +295,7 @@ mod global {
                 match GLOBAL_SEED_STORAGE.state.compare_exchange_weak(
                     UNINIT,
                     LOCKED,
-                    Ordering::Relaxed,
+                    Ordering::Acquire,
                     Ordering::Acquire,
                 ) {
                     Ok(_) => unsafe {
