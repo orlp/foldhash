@@ -94,13 +94,13 @@
 //! foldhash provides (both for [`fast`] and [`quality`]):
 //!
 //! 1. [`RandomState`](fast::RandomState), which always generates a
-//! random per-hasher seed and implicitly stores a reference to [`SharedSeed::global_random`].
+//!    random per-hasher seed and implicitly stores a reference to [`SharedSeed::global_random`].
 //! 2. [`FixedState`](fast::FixedState), which by default uses a fixed
-//! per-hasher seed and implicitly stores a reference to [`SharedSeed::global_fixed`].
+//!    per-hasher seed and implicitly stores a reference to [`SharedSeed::global_fixed`].
 //! 3. [`SeedableRandomState`](fast::SeedableRandomState), which works like
-//! [`RandomState`](fast::RandomState) by default but can be seeded in any manner.
-//! This state must include an explicit reference to a [`SharedSeed`], and thus
-//! this struct is 16 bytes as opposed to just 8 bytes for the previous two.
+//!    [`RandomState`](fast::RandomState) by default but can be seeded in any manner.
+//!    This state must include an explicit reference to a [`SharedSeed`], and thus
+//!    this struct is 16 bytes as opposed to just 8 bytes for the previous two.
 
 #![cfg_attr(all(not(test), not(feature = "std")), no_std)]
 #![warn(missing_docs)]
