@@ -19,7 +19,7 @@ pub struct FoldHasher {
 impl FoldHasher {
     /// Initializes this [`FoldHasher`] with the given per-hasher seed and
     /// [`SharedSeed`].
-    #[inline]
+    #[inline(always)]
     pub fn with_seed(per_hasher_seed: u64, shared_seed: &SharedSeed) -> FoldHasher {
         FoldHasher {
             inner: fast::FoldHasher::with_seed(per_hasher_seed, shared_seed),
@@ -98,6 +98,7 @@ pub struct SeedableRandomState {
 
 impl SeedableRandomState {
     /// Generates a random [`SeedableRandomState`], similar to [`RandomState`].
+    #[inline(always)]
     pub fn random() -> Self {
         Self {
             inner: fast::SeedableRandomState::random(),
@@ -105,6 +106,7 @@ impl SeedableRandomState {
     }
 
     /// Generates a fixed [`SeedableRandomState`], similar to [`FixedState`].
+    #[inline(always)]
     pub fn fixed() -> Self {
         Self {
             inner: fast::SeedableRandomState::fixed(),
@@ -113,6 +115,7 @@ impl SeedableRandomState {
 
     /// Generates a [`SeedableRandomState`] with the given per-hasher seed
     /// and [`SharedSeed`].
+    #[inline(always)]
     pub fn with_seed(per_hasher_seed: u64, shared_seed: &'static SharedSeed) -> Self {
         Self {
             // We do an additional folded multiply with the seed here for

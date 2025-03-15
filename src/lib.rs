@@ -83,6 +83,7 @@
 //! ```
 //!
 //! ## Seeding
+//!
 //! Foldhash relies on a single 8-byte per-hasher seed which should be ideally
 //! be different from each instance to instance, and also a larger
 //! [`SharedSeed`] which may be shared by many different instances.

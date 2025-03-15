@@ -72,12 +72,14 @@ pub struct SharedSeed {
 impl SharedSeed {
     /// Returns the globally shared randomly initialized [`SharedSeed`] as used
     /// by [`RandomState`](crate::fast::RandomState).
+    #[inline(always)]
     pub fn global_random() -> &'static SharedSeed {
         global::GlobalSeed::new().get()
     }
 
     /// Returns the globally shared fixed [`SharedSeed`] as used
     /// by [`FixedState`](crate::fast::FixedState).
+    #[inline(always)]
     pub const fn global_fixed() -> &'static SharedSeed {
         &FIXED_GLOBAL_SEED
     }

@@ -156,6 +156,7 @@ pub struct RandomState {
 }
 
 impl Default for RandomState {
+    #[inline(always)]
     fn default() -> Self {
         Self {
             per_hasher_seed: gen_per_hasher_seed(),
@@ -185,6 +186,7 @@ pub struct SeedableRandomState {
 }
 
 impl Default for SeedableRandomState {
+    #[inline(always)]
     fn default() -> Self {
         Self::random()
     }
@@ -192,6 +194,7 @@ impl Default for SeedableRandomState {
 
 impl SeedableRandomState {
     /// Generates a random [`SeedableRandomState`], similar to [`RandomState`].
+    #[inline(always)]
     pub fn random() -> Self {
         Self {
             per_hasher_seed: gen_per_hasher_seed(),
@@ -200,6 +203,7 @@ impl SeedableRandomState {
     }
 
     /// Generates a fixed [`SeedableRandomState`], similar to [`FixedState`].
+    #[inline(always)]
     pub fn fixed() -> Self {
         Self {
             per_hasher_seed: ARBITRARY3,
@@ -209,6 +213,7 @@ impl SeedableRandomState {
 
     /// Generates a [`SeedableRandomState`] with the given per-hasher seed
     /// and [`SharedSeed`].
+    #[inline(always)]
     pub fn with_seed(per_hasher_seed: u64, shared_seed: &'static SharedSeed) -> Self {
         // XOR with ARBITRARY3 such that with_seed(0) matches default.
         Self {
