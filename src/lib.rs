@@ -108,7 +108,23 @@ const ARBITRARY9: u64 = 0xd1310ba698dfb5ac;
 
 #[inline(always)]
 const fn folded_multiply(x: u64, y: u64) -> u64 {
-    #[cfg(target_pointer_width = "64")]
+    // The following code path is only fast if 64-bit to 128-bit widening
+    // multiplication is supported by the architecture. Most 64-bit
+    // architectures except SPARC64 and Wasm64 support it. However, the target
+    // pointer width doesn't always indicate that we are dealing with a 64-bit
+    // architecture, as there are ABIs that reduce the pointer width, especially
+    // on AArch64 and x86-64. WebAssembly (regardless of pointer width) supports
+    // 64-bit to 128-bit widening multiplication with the `wide-arithmetic`
+    // proposal.
+    #[cfg(any(
+        all(
+            target_pointer_width = "64",
+            not(any(target_arch = "sparc64", target_arch = "wasm64")),
+        ),
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_family = "wasm", target_feature = "wide-arithmetic"),
+    ))]
     {
         // We compute the full u64 x u64 -> u128 product, this is a single mul
         // instruction on x86-64, one mul plus one mulhi on ARM64.
@@ -123,7 +139,15 @@ const fn folded_multiply(x: u64, y: u64) -> u64 {
         lo ^ hi
     }
 
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(not(any(
+        all(
+            target_pointer_width = "64",
+            not(any(target_arch = "sparc64", target_arch = "wasm64")),
+        ),
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_family = "wasm", target_feature = "wide-arithmetic"),
+    )))]
     {
         // u64 x u64 -> u128 product is quite expensive on 32-bit.
         // We approximate it by expanding the multiplication and eliminating
