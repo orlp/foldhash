@@ -125,20 +125,26 @@ const fn folded_multiply(x: u64, y: u64) -> u64 {
 
     #[cfg(target_pointer_width = "32")]
     {
-        // u64 x u64 -> u128 product is prohibitively expensive on 32-bit.
-        // Decompose into 32-bit parts.
+        // u64 x u64 -> u128 product is quite expensive on 32-bit.
+        // We approximate it by expanding the multiplication and eliminating
+        // carries by replacing additions with XORs:
+        //    (2^32 hx + lx)*(2^32 hy + ly) =
+        //    2^64 hx*hy + 2^32 (hx*ly + lx*hy) + lx*ly ~=
+        //    2^64 hx*hy ^ 2^32 (hx*ly ^ lx*hy) ^ lx*ly
+        // Which when folded becomes:
+        //    (hx*hy ^ lx*ly) ^ (hx*ly ^ lx*hy).rotate_right(32)
+
         let lx = x as u32;
         let ly = y as u32;
         let hx = (x >> 32) as u32;
         let hy = (y >> 32) as u32;
 
-        // u32 x u32 -> u64 the low bits of one with the high bits of the other.
-        let afull = (lx as u64).wrapping_mul(hy as u64);
-        let bfull = (hx as u64).wrapping_mul(ly as u64);
+        let ll = (lx as u64).wrapping_mul(ly as u64);
+        let lh = (lx as u64).wrapping_mul(hy as u64);
+        let hl = (hx as u64).wrapping_mul(ly as u64);
+        let hh = (hx as u64).wrapping_mul(hy as u64);
 
-        // Combine, swapping low/high of one of them so the upper bits of the
-        // product of one combine with the lower bits of the other.
-        afull ^ bfull.rotate_right(32)
+        (hh ^ ll) ^ (hl ^ lh).rotate_right(32)
     }
 }
 
