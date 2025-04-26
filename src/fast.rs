@@ -22,7 +22,7 @@ impl<'a> FoldHasher<'a> {
     /// Initializes this [`FoldHasher`] with the given per-hasher seed and
     /// [`SharedSeed`].
     #[inline]
-    pub fn with_seed(per_hasher_seed: u64, shared_seed: &'a SharedSeed) -> FoldHasher<'a> {
+    pub const fn with_seed(per_hasher_seed: u64, shared_seed: &'a SharedSeed) -> FoldHasher<'a> {
         FoldHasher {
             accumulator: per_hasher_seed,
             sponge: 0,
