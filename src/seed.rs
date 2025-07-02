@@ -77,6 +77,15 @@ impl SharedSeed {
         global::GlobalSeed::new().get()
     }
 
+    /// Initialize the global shared seed with a specific [`SharedSeed`].
+    ///
+    /// Returns a reference to the globally shared seed, which is now includes
+    /// the provided seed.
+    #[inline(always)]
+    pub fn global_random_init_from_seed(seed: SharedSeed) -> &'static SharedSeed {
+        global::GlobalSeed::init_from_seed(seed).get()
+    }
+
     /// Returns the globally shared fixed [`SharedSeed`] as used
     /// by [`FixedState`](crate::fast::FixedState).
     #[inline(always)]
@@ -167,6 +176,8 @@ mod global {
     struct GlobalSeedStorage {
         state: AtomicU8,
         seed: UnsafeCell<SharedSeed>,
+        user_provided_state: AtomicU8,
+        user_provided_seed: UnsafeCell<SharedSeed>,
     }
 
     const UNINIT: u8 = 0;
@@ -181,37 +192,73 @@ mod global {
     static GLOBAL_SEED_STORAGE: GlobalSeedStorage = GlobalSeedStorage {
         state: AtomicU8::new(UNINIT),
         seed: UnsafeCell::new(SharedSeed { seeds: [0; 4] }),
+        // We use a separate user-provided seed storage to allow the user to
+        // provide a seed after the global seed has been initialized, without
+        // having to re-initialize the global seed.
+        user_provided_state: AtomicU8::new(UNINIT),
+        user_provided_seed: UnsafeCell::new(SharedSeed { seeds: [0; 4] }),
     };
 
     /// An object representing an initialized global seed.
     ///
-    /// Does not actually store the seed inside itself, it is a zero-sized type.
-    /// This prevents inflating the RandomState size and in turn HashMap's size.
+    /// Does not actually store the seed inside itself, just a flag to indicate
+    /// whether the user provided a seed or not.
     #[derive(Copy, Clone, Debug)]
     pub struct GlobalSeed {
-        // So we can't accidentally type GlobalSeed { } within this crate.
-        _no_accidental_unsafe_init: (),
+        use_user_provided_seed: bool,
     }
 
     impl GlobalSeed {
         #[inline(always)]
         pub fn new() -> Self {
-            if GLOBAL_SEED_STORAGE.state.load(Ordering::Acquire) != INIT {
-                Self::init_slow()
+            let use_user_provided_seed =
+                if GLOBAL_SEED_STORAGE.state.load(Ordering::Acquire) == INIT {
+                    true
+                } else if GLOBAL_SEED_STORAGE.state.load(Ordering::Acquire) != INIT {
+                    let seed = generate_global_seed();
+
+                    Self::init_slow(&GLOBAL_SEED_STORAGE.state, &GLOBAL_SEED_STORAGE.seed, seed);
+                    false
+                } else {
+                    false
+                };
+            Self {
+                use_user_provided_seed,
+            }
+        }
+
+        #[inline(always)]
+        pub fn init_from_seed(user_provided_seed: SharedSeed) -> Self {
+            if GLOBAL_SEED_STORAGE
+                .user_provided_state
+                .load(Ordering::Acquire)
+                != INIT
+            {
+                let global_seed = GlobalSeed::new().get();
+                let seed = SharedSeed {
+                    seeds: [
+                        folded_multiply(user_provided_seed.seeds[0], global_seed.seeds[0]),
+                        folded_multiply(user_provided_seed.seeds[1], global_seed.seeds[1]),
+                        folded_multiply(user_provided_seed.seeds[2], global_seed.seeds[2]),
+                        folded_multiply(user_provided_seed.seeds[3], global_seed.seeds[3]),
+                    ],
+                };
+                Self::init_slow(
+                    &GLOBAL_SEED_STORAGE.user_provided_state,
+                    &GLOBAL_SEED_STORAGE.user_provided_seed,
+                    seed,
+                )
             }
             Self {
-                _no_accidental_unsafe_init: (),
+                use_user_provided_seed: true,
             }
         }
 
         #[cold]
         #[inline(never)]
-        fn init_slow() {
-            // Generate seed outside of critical section.
-            let seed = generate_global_seed();
-
+        fn init_slow(state: &AtomicU8, dst_seed: &UnsafeCell<SharedSeed>, src_seed: SharedSeed) {
             loop {
-                match GLOBAL_SEED_STORAGE.state.compare_exchange_weak(
+                match state.compare_exchange_weak(
                     UNINIT,
                     LOCKED,
                     Ordering::Acquire,
@@ -219,8 +266,8 @@ mod global {
                 ) {
                     Ok(_) => unsafe {
                         // SAFETY: we just acquired an exclusive lock.
-                        *GLOBAL_SEED_STORAGE.seed.get() = seed;
-                        GLOBAL_SEED_STORAGE.state.store(INIT, Ordering::Release);
+                        *dst_seed.get() = src_seed;
+                        state.store(INIT, Ordering::Release);
                         return;
                     },
 
@@ -239,7 +286,11 @@ mod global {
         pub fn get(self) -> &'static SharedSeed {
             // SAFETY: our constructor ensured we are in the INIT state and thus
             // this raw read does not race with any write.
-            unsafe { &*GLOBAL_SEED_STORAGE.seed.get() }
+            if self.use_user_provided_seed {
+                unsafe { &*GLOBAL_SEED_STORAGE.user_provided_seed.get() }
+            } else {
+                unsafe { &*GLOBAL_SEED_STORAGE.seed.get() }
+            }
         }
     }
 }
