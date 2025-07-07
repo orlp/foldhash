@@ -83,7 +83,14 @@ impl SharedSeed {
     /// the provided seed.
     #[inline(always)]
     pub fn global_random_init_from_seed(seed: SharedSeed) -> &'static SharedSeed {
-        global::GlobalSeed::init_from_seed(seed).get()
+        global::GlobalSeed::init_from_seed(seed).get_user_or_global()
+    }
+
+    /// Returns the a global seed that includes the user provided seed. If user did not provide a seed
+    /// it is the same as [`SharedSeed::global_random`].
+    #[inline(always)]
+    pub fn global_or_user() -> &'static SharedSeed {
+        global::GlobalSeed::new().get_user_or_global()
     }
 
     /// Returns the globally shared fixed [`SharedSeed`] as used
@@ -284,6 +291,11 @@ mod global {
 
         #[inline(always)]
         pub fn get(self) -> &'static SharedSeed {
+            unsafe { &*GLOBAL_SEED_STORAGE.seed.get() }
+        }
+
+        #[inline(always)]
+        pub fn get_user_or_global(self) -> &'static SharedSeed {
             // SAFETY: our constructor ensured we are in the INIT state and thus
             // this raw read does not race with any write.
             if self.use_user_provided_seed {

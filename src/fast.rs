@@ -170,7 +170,7 @@ impl BuildHasher for RandomState {
 
     #[inline(always)]
     fn build_hasher(&self) -> FoldHasher {
-        FoldHasher::with_seed(self.per_hasher_seed, self.global_seed.get())
+        FoldHasher::with_seed(self.per_hasher_seed, self.global_seed.get_user_or_global())
     }
 }
 
@@ -198,7 +198,7 @@ impl SeedableRandomState {
     pub fn random() -> Self {
         Self {
             per_hasher_seed: gen_per_hasher_seed(),
-            shared_seed: SharedSeed::global_random(),
+            shared_seed: SharedSeed::global_or_user(),
         }
     }
 
