@@ -221,6 +221,7 @@ const fn rotate_right(x: u64, r: u32) -> u64 {
 }
 
 /// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.
+#[inline(never)]
 fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> u64 {
     // Process 32 bytes per iteration, 16 bytes from the start, 16 bytes from
     // the end. On the last iteration these two chunks can overlap, but that is
