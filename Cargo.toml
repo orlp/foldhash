@@ -25,6 +25,7 @@ uuid = "1.8"
 rand = "0.8"
 ahash = "0.8"
 fxhash = "0.2"
+rapidhash = "3.0.0"
 chrono = "0.4"
 
 [lib]

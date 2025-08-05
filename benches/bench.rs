@@ -147,24 +147,32 @@ fn profile_distr<D: Distribution>(distr: D, map_size: usize, c: &mut Criterion) 
 
     profile_hashonly::<foldhash::fast::RandomState, _>("foldhash-fast", distr.clone(), c);
     profile_hashonly::<foldhash::quality::RandomState, _>("foldhash-quality", distr.clone(), c);
+    profile_hashonly::<rapidhash::fast::RandomState, _>("rapidhash-fast", distr.clone(), c);
+    profile_hashonly::<rapidhash::quality::RandomState, _>("rapidhash-quality", distr.clone(), c);
     profile_hashonly::<fxhash::FxBuildHasher, _>("fxhash", distr.clone(), c);
     profile_hashonly::<ahash::RandomState, _>("ahash", distr.clone(), c);
     profile_hashonly::<std::hash::RandomState, _>("siphash", distr.clone(), c);
 
     profile_lookup_miss::<foldhash::fast::RandomState, _>("foldhash-fast", distr.clone(), map_size, c);
     profile_lookup_miss::<foldhash::quality::RandomState, _>("foldhash-quality", distr.clone(), map_size, c);
+    profile_lookup_miss::<rapidhash::fast::RandomState, _>("rapidhash-fast", distr.clone(), map_size, c);
+    profile_lookup_miss::<rapidhash::quality::RandomState, _>("rapidhash-quality", distr.clone(), map_size, c);
     profile_lookup_miss::<fxhash::FxBuildHasher, _>("fxhash", distr.clone(), map_size, c);
     profile_lookup_miss::<ahash::RandomState, _>("ahash", distr.clone(), map_size, c);
     profile_lookup_miss::<std::hash::RandomState, _>("siphash", distr.clone(), map_size, c);
 
     profile_lookup_hit::<foldhash::fast::RandomState, _>("foldhash-fast", distr.clone(), map_size, c);
     profile_lookup_hit::<foldhash::quality::RandomState, _>("foldhash-quality", distr.clone(), map_size, c);
+    profile_lookup_hit::<rapidhash::fast::RandomState, _>("rapidhash-fast", distr.clone(), map_size, c);
+    profile_lookup_hit::<rapidhash::quality::RandomState, _>("rapidhash-quality", distr.clone(), map_size, c);
     profile_lookup_hit::<fxhash::FxBuildHasher, _>("fxhash", distr.clone(), map_size, c);
     profile_lookup_hit::<ahash::RandomState, _>("ahash", distr.clone(), map_size, c);
     profile_lookup_hit::<std::hash::RandomState, _>("siphash", distr.clone(), map_size, c);
 
     profile_set_build::<foldhash::fast::RandomState, _>("foldhash-fast", distr.clone(), map_size, c);
     profile_set_build::<foldhash::quality::RandomState, _>("foldhash-quality", distr.clone(), map_size, c);
+    profile_set_build::<rapidhash::fast::RandomState, _>("rapidhash-fast", distr.clone(), map_size, c);
+    profile_set_build::<rapidhash::quality::RandomState, _>("rapidhash-quality", distr.clone(), map_size, c);
     profile_set_build::<fxhash::FxBuildHasher, _>("fxhash", distr.clone(), map_size, c);
     profile_set_build::<ahash::RandomState, _>("ahash", distr.clone(), map_size, c);
     profile_set_build::<std::hash::RandomState, _>("siphash", distr.clone(), map_size, c);
