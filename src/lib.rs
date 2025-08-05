@@ -247,7 +247,7 @@ fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> 
     s0 ^ s1
 }
 
-#[cold]
+#[inline(never)]
 #[must_use]
 fn rapidhash_core_16_288(hasher: &FoldHasher, data: &[u8]) -> u64 {
     let mut seed = hasher.accumulator;
