@@ -224,25 +224,41 @@ const fn rotate_right(x: u64, r: u32) -> u64 {
 /// A helper method for doing an unaligned 32-bit read from a byte slice.
 #[inline(always)]
 fn read_u32(slice: &[u8], offset: usize) -> u32 {
-    debug_assert!(slice.len() >= 4 + offset);
-    u32::from_ne_bytes(slice[offset..offset + 4].try_into().unwrap())
-
     // Uncomment the following to explicitly omit bounds checks for debugging:
     // debug_assert!(offset as isize >= 0);
     // debug_assert!(slice.len() >= 4 + offset);
     // unsafe { core::ptr::read_unaligned(slice.as_ptr().offset(offset as isize) as *const u32) }
+
+    // Equivalent to slice[offset..offset+4].try_into().unwrap(), but const-friendly
+    let maybe_buf = slice.split_at(offset).1.first_chunk::<4>();
+    let buf = match maybe_buf {
+        Some(buf) => *buf,
+        None => panic!("read_u32: slice too short"),
+    };
+    u32::from_ne_bytes(buf)
 }
 
 /// A helper method for doing an unaligned 64-bit read from a byte slice.
+///
+/// This function is specifically implemented this way to allow the compiler
+/// to optimise away the bounds checks. The traditional approach of using
+/// `u64::from_ne_bytes(slice[offset..offset + 8].try_into().unwrap())` does
+/// not allow the compiler to fully optimise out the bounds checks for
+/// unknown reasons.
 #[inline(always)]
 fn read_u64(slice: &[u8], offset: usize) -> u64 {
-    debug_assert!(slice.len() >= 8 + offset);
-    u64::from_ne_bytes(slice[offset..offset + 8].try_into().unwrap())
-
     // Uncomment the following to explicitly omit bounds checks for debugging:
     // debug_assert!(offset as isize >= 0);
     // debug_assert!(slice.len() >= 4 + offset);
     // unsafe { core::ptr::read_unaligned(slice.as_ptr().offset(offset as isize) as *const u64) }
+
+    // equivalent to slice[offset..offset+8].try_into().unwrap(), but const-friendly
+    let maybe_buf = slice.split_at(offset).1.first_chunk::<8>();
+    let buf = match maybe_buf {
+        Some(buf) => *buf,
+        None => panic!("read_u64: slice too short"),
+    };
+    u64::from_ne_bytes(buf)
 }
 
 /// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.

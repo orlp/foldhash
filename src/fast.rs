@@ -52,25 +52,25 @@ impl Hasher for FoldHasher {
     fn write(&mut self, bytes: &[u8]) {
         let accumulator = self.accumulator;
         let seeds = self.seeds;
-        let len = bytes.len();
+        // let len = bytes.len();
 
         // moving self.accumulator outside of this if block improves performance, I'm surprised the
         // compiler can't do this automatically
-        self.accumulator = if len <= 16 {
+        self.accumulator = if bytes.len() <= 16 {
             let mut s0 = 0;
             let mut s1 = 0;
 
             // XOR the input into s0, s1, then multiply and fold.
-            if len >= 8 {
+            if bytes.len() >= 8 {
                 s0 = read_u64(bytes, 0);
-                s1 = read_u64(bytes, len - 8);
-            } else if len >= 4 {
+                s1 = read_u64(bytes, bytes.len() - 8);
+            } else if bytes.len() >= 4 {
                 s0 = read_u32(bytes, 0) as u64;
-                s1 = read_u32(bytes, len - 4) as u64;
-            } else if len > 0 {
+                s1 = read_u32(bytes, bytes.len() - 4) as u64;
+            } else if bytes.len() > 0 {
                 let lo = bytes[0];
-                let mid = bytes[len / 2];
-                let hi = bytes[len - 1];
+                let mid = bytes[bytes.len() / 2];
+                let hi = bytes[bytes.len() - 1];
                 s0 = hi as u64;
                 s1 = ((lo as u64) << 45) | mid as u64;
             }
@@ -80,10 +80,10 @@ impl Hasher for FoldHasher {
             // collision studies suggested this or an XOR are sufficient. Moving this to the bottom
             // of the function appears to improve performance.
             s0 ^= seeds[0];
-            s1 ^= accumulator.wrapping_add(len as u64);
+            s1 ^= accumulator.wrapping_add(bytes.len() as u64);
 
             folded_multiply(s0, s1)
-        } else if len <= 288 {
+        } else if bytes.len() <= 288 {
             // minimising the number of arguments, but self.accumulator and self.seeds can already
             // be loaded into registers in this function, so passing them directly appears faster
             rapidhash_core_16_288(accumulator, seeds, bytes)
