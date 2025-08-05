@@ -221,6 +221,30 @@ const fn rotate_right(x: u64, r: u32) -> u64 {
     }
 }
 
+/// A helper method for doing an unaligned 32-bit read from a byte slice.
+#[inline(always)]
+fn read_u32(slice: &[u8], offset: usize) -> u32 {
+    debug_assert!(slice.len() >= 4 + offset);
+    u32::from_ne_bytes(slice[offset..offset + 4].try_into().unwrap())
+
+    // Uncomment the following to explicitly omit bounds checks for debugging:
+    // debug_assert!(offset as isize >= 0);
+    // debug_assert!(slice.len() >= 4 + offset);
+    // unsafe { core::ptr::read_unaligned(slice.as_ptr().offset(offset as isize) as *const u32) }
+}
+
+/// A helper method for doing an unaligned 64-bit read from a byte slice.
+#[inline(always)]
+fn read_u64(slice: &[u8], offset: usize) -> u64 {
+    debug_assert!(slice.len() >= 8 + offset);
+    u64::from_ne_bytes(slice[offset..offset + 8].try_into().unwrap())
+
+    // Uncomment the following to explicitly omit bounds checks for debugging:
+    // debug_assert!(offset as isize >= 0);
+    // debug_assert!(slice.len() >= 4 + offset);
+    // unsafe { core::ptr::read_unaligned(slice.as_ptr().offset(offset as isize) as *const u64) }
+}
+
 /// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.
 fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> u64 {
     // Process 32 bytes per iteration, 16 bytes from the start, 16 bytes from
@@ -257,9 +281,9 @@ fn rapidhash_core_16_288(accumulator: u64, seeds: &[u64; 4], data: &[u8]) -> u64
         let mut see2 = seed;
 
         while slice.len() >= 48 {
-            seed = folded_multiply(u64::from_ne_bytes(slice[0..8].try_into().unwrap()) ^ seeds[1], u64::from_ne_bytes(slice[8..16].try_into().unwrap()) ^ seed);
-            see1 = folded_multiply(u64::from_ne_bytes(slice[16..24].try_into().unwrap()) ^ seeds[2], u64::from_ne_bytes(slice[24..32].try_into().unwrap()) ^ see1);
-            see2 = folded_multiply(u64::from_ne_bytes(slice[32..40].try_into().unwrap()) ^ seeds[3], u64::from_ne_bytes(slice[40..48].try_into().unwrap()) ^ see2);
+            seed = folded_multiply(read_u64(slice, 0) ^ seeds[1], read_u64(slice, 8) ^ seed);
+            see1 = folded_multiply(read_u64(slice, 16) ^ seeds[2], read_u64(slice, 24) ^ see1);
+            see2 = folded_multiply(read_u64(slice, 32) ^ seeds[3], read_u64(slice, 40) ^ see2);
             let (_, split) = slice.split_at(48);
             slice = split;
         }
@@ -268,14 +292,14 @@ fn rapidhash_core_16_288(accumulator: u64, seeds: &[u64; 4], data: &[u8]) -> u64
     }
 
     if slice.len() > 16 {
-        seed = folded_multiply(u64::from_ne_bytes(slice[0..8].try_into().unwrap()) ^ seeds[1], u64::from_ne_bytes(slice[8..16].try_into().unwrap()) ^ seed);
+        seed = folded_multiply(read_u64(slice, 0) ^ seeds[1], read_u64(slice, 8) ^ seed);
         if slice.len() > 32 {
-            seed = folded_multiply(u64::from_ne_bytes(slice[16..24].try_into().unwrap()) ^ seeds[2], u64::from_ne_bytes(slice[24..32].try_into().unwrap()) ^ seed);
+            seed = folded_multiply(read_u64(slice, 16) ^ seeds[2], read_u64(slice, 24) ^ seed);
         }
     }
 
-    let mut a = u64::from_ne_bytes( data[data.len() - 16..data.len() - 8].try_into().unwrap());
-    let mut b = u64::from_ne_bytes( data[data.len() - 8..data.len()].try_into().unwrap());
+    let mut a = read_u64(data, data.len() - 16);
+    let mut b = read_u64(data, data.len() - 8);
 
     seed = seed.wrapping_add(data.len() as u64);
     a ^= seeds[2];
