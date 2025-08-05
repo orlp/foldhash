@@ -3,7 +3,7 @@
 use core::hash::{BuildHasher, Hasher};
 
 use crate::seed::{gen_per_hasher_seed, GlobalSeed, SharedSeed};
-use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rotate_right, ARBITRARY3};
+use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rapidhash_core_16_288, rotate_right, ARBITRARY3};
 
 /// A [`Hasher`] instance implementing foldhash, optimized for speed.
 ///
@@ -12,13 +12,13 @@ use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rotate_right, A
 /// [`FixedState`] to create [`FoldHasher`]s.
 #[derive(Clone)]
 pub struct FoldHasher {
-    accumulator: u64,
+    pub(crate) accumulator: u64,
     sponge: u128,
     sponge_len: u8,
-    fold_seed: u64,
-    expand_seed: u64,
-    expand_seed2: u64,
-    expand_seed3: u64,
+    pub(crate) fold_seed: u64,
+    pub(crate) expand_seed: u64,
+    pub(crate) expand_seed2: u64,
+    pub(crate) expand_seed3: u64,
 }
 
 impl FoldHasher {
@@ -62,41 +62,43 @@ impl Hasher for FoldHasher {
         // which costs only a single cycle (or none if executed with
         // instruction-level parallelism).
         let len = bytes.len();
-        let base_seed = rotate_right(self.accumulator, len as u32);
-        if len <= 16 {
-            let mut s0 = base_seed;
-            let mut s1 = self.expand_seed;
+
+        // moving self.accumulator outside of this if block improves performance, I'm surprised the
+        // compiler can't do this automatically
+        self.accumulator = if len <= 16 {
+            let accumulator = self.accumulator;
+            let mut s0 = 0;
+            let mut s1 = 0;
+
             // XOR the input into s0, s1, then multiply and fold.
             if len >= 8 {
-                s0 ^= u64::from_ne_bytes(bytes[0..8].try_into().unwrap());
-                s1 ^= u64::from_ne_bytes(bytes[len - 8..].try_into().unwrap());
+                s0 = u64::from_ne_bytes(bytes[0..8].try_into().unwrap());
+                s1 = u64::from_ne_bytes(bytes[len - 8..].try_into().unwrap());
             } else if len >= 4 {
-                s0 ^= u32::from_ne_bytes(bytes[0..4].try_into().unwrap()) as u64;
-                s1 ^= u32::from_ne_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
+                s0 = u32::from_ne_bytes(bytes[0..4].try_into().unwrap()) as u64;
+                s1 = u32::from_ne_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
             } else if len > 0 {
                 let lo = bytes[0];
                 let mid = bytes[len / 2];
                 let hi = bytes[len - 1];
-                s0 ^= lo as u64;
-                s1 ^= ((hi as u64) << 8) | mid as u64;
+                s0 = hi as u64;
+                s1 = ((lo as u64) << 45) | mid as u64;
             }
-            self.accumulator = folded_multiply(s0, s1);
-        } else if len < 256 {
-            self.accumulator = hash_bytes_medium(
-                bytes,
-                base_seed,
-                base_seed.wrapping_add(self.expand_seed),
-                self.fold_seed,
-            );
+
+            // I prefer to wrapping add the length here, as not all platforms have a rotation, and
+            // although it has a smaller impact on the output hash, rapidhash's output quality and
+            // collision studies suggested this or an XOR are sufficient. Moving this to the bottom
+            // of the function appears to improve performance.
+            s0 ^= self.fold_seed;
+            s1 ^= accumulator.wrapping_add(len as u64);
+
+            folded_multiply(s0, s1)
+        } else if len < 256 {  // TODO: could increase to 288?
+            // minimise the number of arguments, let the compiler choose what's best regarding
+            // register allocation, and make the assembly for this branch smaller
+            rapidhash_core_16_288(&self, bytes)
         } else {
-            self.accumulator = hash_bytes_long(
-                bytes,
-                base_seed,
-                base_seed.wrapping_add(self.expand_seed),
-                base_seed.wrapping_add(self.expand_seed2),
-                base_seed.wrapping_add(self.expand_seed3),
-                self.fold_seed,
-            );
+            hash_bytes_long(&self, bytes)
         }
     }
 
