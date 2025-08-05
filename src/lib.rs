@@ -317,7 +317,7 @@ fn rapidhash_core_16_288(accumulator: u64, seeds: &[u64; 4], data: &[u8]) -> u64
     let mut a = read_u64(data, data.len() - 16);
     let mut b = read_u64(data, data.len() - 8);
 
-    seed = seed.wrapping_add(data.len() as u64);
+    seed = rotate_right(seed, data.len() as u32);
     a ^= seeds[2];
     b ^= seed;
     folded_multiply(a, b)

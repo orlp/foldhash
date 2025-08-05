@@ -52,7 +52,6 @@ impl Hasher for FoldHasher {
     fn write(&mut self, bytes: &[u8]) {
         let accumulator = self.accumulator;
         let seeds = self.seeds;
-        // let len = bytes.len();
 
         // moving self.accumulator outside of this if block improves performance, I'm surprised the
         // compiler can't do this automatically
@@ -80,7 +79,7 @@ impl Hasher for FoldHasher {
             // collision studies suggested this or an XOR are sufficient. Moving this to the bottom
             // of the function appears to improve performance.
             s0 ^= seeds[0];
-            s1 ^= accumulator.wrapping_add(bytes.len() as u64);
+            s1 ^= rotate_right(accumulator, bytes.len() as u32);
 
             folded_multiply(s0, s1)
         } else if bytes.len() <= 288 {
