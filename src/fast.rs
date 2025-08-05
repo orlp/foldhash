@@ -13,27 +13,21 @@ use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rapidhash_core_
 #[derive(Clone)]
 pub struct FoldHasher {
     pub(crate) accumulator: u64,
+    pub(crate) seeds: &'static [u64; 4],
     sponge: u128,
     sponge_len: u8,
-    pub(crate) fold_seed: u64,
-    pub(crate) expand_seed: u64,
-    pub(crate) expand_seed2: u64,
-    pub(crate) expand_seed3: u64,
 }
 
 impl FoldHasher {
     /// Initializes this [`FoldHasher`] with the given per-hasher seed and
     /// [`SharedSeed`].
     #[inline]
-    pub fn with_seed(per_hasher_seed: u64, shared_seed: &SharedSeed) -> FoldHasher {
+    pub fn with_seed(per_hasher_seed: u64, shared_seed: &'static SharedSeed) -> FoldHasher {
         FoldHasher {
             accumulator: per_hasher_seed,
+            seeds: &shared_seed.seeds,
             sponge: 0,
             sponge_len: 0,
-            fold_seed: shared_seed.seeds[0],
-            expand_seed: shared_seed.seeds[1],
-            expand_seed2: shared_seed.seeds[2],
-            expand_seed3: shared_seed.seeds[3],
         }
     }
 
@@ -43,7 +37,7 @@ impl FoldHasher {
         if self.sponge_len as usize + bits > 128 {
             let lo = self.sponge as u64;
             let hi = (self.sponge >> 64) as u64;
-            self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.fold_seed);
+            self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.seeds[0]);
             self.sponge = x.into();
             self.sponge_len = bits as u8;
         } else {
@@ -89,16 +83,16 @@ impl Hasher for FoldHasher {
             // although it has a smaller impact on the output hash, rapidhash's output quality and
             // collision studies suggested this or an XOR are sufficient. Moving this to the bottom
             // of the function appears to improve performance.
-            s0 ^= self.fold_seed;
+            s0 ^= self.seeds[0];
             s1 ^= accumulator.wrapping_add(len as u64);
 
             folded_multiply(s0, s1)
-        } else if len < 256 {  // TODO: could increase to 288?
-            // minimise the number of arguments, let the compiler choose what's best regarding
-            // register allocation, and make the assembly for this branch smaller
-            rapidhash_core_16_288(&self, bytes)
+        } else if len <= 288 {
+            // minimising the number of arguments, but self.accumulator and self.seeds can already
+            // be loaded into registers in this function, so passing them directly appears faster
+            rapidhash_core_16_288(self.accumulator, self.seeds, bytes)
         } else {
-            hash_bytes_long(&self, bytes)
+            hash_bytes_long(self.accumulator, self.seeds, bytes)
         }
     }
 
@@ -126,7 +120,7 @@ impl Hasher for FoldHasher {
     fn write_u128(&mut self, i: u128) {
         let lo = i as u64;
         let hi = (i >> 64) as u64;
-        self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.fold_seed);
+        self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.seeds[0]);
     }
 
     #[inline(always)]
@@ -143,7 +137,7 @@ impl Hasher for FoldHasher {
         if self.sponge_len > 0 {
             let lo = self.sponge as u64;
             let hi = (self.sponge >> 64) as u64;
-            folded_multiply(lo ^ self.accumulator, hi ^ self.fold_seed)
+            folded_multiply(lo ^ self.accumulator, hi ^ self.seeds[0])
         } else {
             self.accumulator
         }

@@ -248,9 +248,8 @@ fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> 
 }
 
 #[inline(never)]
-#[must_use]
-fn rapidhash_core_16_288(hasher: &FoldHasher, data: &[u8]) -> u64 {
-    let mut seed = hasher.accumulator;
+fn rapidhash_core_16_288(accumulator: u64, seeds: &[u64; 4], data: &[u8]) -> u64 {
+    let mut seed = accumulator;
     let mut slice = data;
 
     if slice.len() > 48 {
@@ -258,9 +257,9 @@ fn rapidhash_core_16_288(hasher: &FoldHasher, data: &[u8]) -> u64 {
         let mut see2 = seed;
 
         while slice.len() >= 48 {
-            seed = folded_multiply(u64::from_ne_bytes(slice[0..8].try_into().unwrap()) ^ hasher.expand_seed, u64::from_ne_bytes(slice[8..16].try_into().unwrap()) ^ seed);
-            see1 = folded_multiply(u64::from_ne_bytes(slice[16..24].try_into().unwrap()) ^ hasher.expand_seed2, u64::from_ne_bytes(slice[24..32].try_into().unwrap()) ^ see1);
-            see2 = folded_multiply(u64::from_ne_bytes(slice[32..40].try_into().unwrap()) ^ hasher.expand_seed3, u64::from_ne_bytes(slice[40..48].try_into().unwrap()) ^ see2);
+            seed = folded_multiply(u64::from_ne_bytes(slice[0..8].try_into().unwrap()) ^ seeds[1], u64::from_ne_bytes(slice[8..16].try_into().unwrap()) ^ seed);
+            see1 = folded_multiply(u64::from_ne_bytes(slice[16..24].try_into().unwrap()) ^ seeds[2], u64::from_ne_bytes(slice[24..32].try_into().unwrap()) ^ see1);
+            see2 = folded_multiply(u64::from_ne_bytes(slice[32..40].try_into().unwrap()) ^ seeds[3], u64::from_ne_bytes(slice[40..48].try_into().unwrap()) ^ see2);
             let (_, split) = slice.split_at(48);
             slice = split;
         }
@@ -269,9 +268,9 @@ fn rapidhash_core_16_288(hasher: &FoldHasher, data: &[u8]) -> u64 {
     }
 
     if slice.len() > 16 {
-        seed = folded_multiply(u64::from_ne_bytes(slice[0..8].try_into().unwrap()) ^ hasher.expand_seed, u64::from_ne_bytes(slice[8..16].try_into().unwrap()) ^ seed);
+        seed = folded_multiply(u64::from_ne_bytes(slice[0..8].try_into().unwrap()) ^ seeds[1], u64::from_ne_bytes(slice[8..16].try_into().unwrap()) ^ seed);
         if slice.len() > 32 {
-            seed = folded_multiply(u64::from_ne_bytes(slice[16..24].try_into().unwrap()) ^ hasher.expand_seed2, u64::from_ne_bytes(slice[24..32].try_into().unwrap()) ^ seed);
+            seed = folded_multiply(u64::from_ne_bytes(slice[16..24].try_into().unwrap()) ^ seeds[2], u64::from_ne_bytes(slice[24..32].try_into().unwrap()) ^ seed);
         }
     }
 
@@ -279,7 +278,7 @@ fn rapidhash_core_16_288(hasher: &FoldHasher, data: &[u8]) -> u64 {
     let mut b = u64::from_ne_bytes( data[data.len() - 8..data.len()].try_into().unwrap());
 
     seed = seed.wrapping_add(data.len() as u64);
-    a ^= hasher.expand_seed2;
+    a ^= seeds[2];
     b ^= seed;
     folded_multiply(a, b)
 }
@@ -288,15 +287,16 @@ fn rapidhash_core_16_288(hasher: &FoldHasher, data: &[u8]) -> u64 {
 #[cold]
 #[inline(never)]
 fn hash_bytes_long(
-    hasher: &FoldHasher,
+    accumulator: u64,
+    seeds: &[u64; 4],
     bytes: &[u8],
 ) -> u64 {
-    let base_seed = rotate_right(hasher.accumulator, bytes.len() as u32);
-    let fold_seed = hasher.fold_seed;
+    let base_seed = rotate_right(accumulator, bytes.len() as u32);
+    let fold_seed = seeds[0];
     let mut s0 = base_seed;
-    let mut s1 = base_seed.wrapping_add(hasher.expand_seed);
-    let mut s2 = base_seed.wrapping_add(hasher.expand_seed2);
-    let mut s3 = base_seed.wrapping_add(hasher.expand_seed3);
+    let mut s1 = base_seed.wrapping_add(seeds[1]);
+    let mut s2 = base_seed.wrapping_add(seeds[2]);
+    let mut s3 = base_seed.wrapping_add(seeds[3]);
 
     let chunks = bytes.chunks_exact(64);
     let remainder = chunks.remainder().len();
