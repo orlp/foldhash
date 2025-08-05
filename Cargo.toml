@@ -23,6 +23,7 @@ criterion = "0.5"
 hashbrown = "0.14"
 uuid = "1.8"
 rand = "0.8"
+rapidhash = "3.0"
 ahash = "0.8"
 fxhash = "0.2"
 chrono = "0.4"
@@ -42,3 +43,6 @@ harness = false
 
 [profile.release]
 lto = "thin"
+codegen-units = 1
+incremental = false
+debug-assertions = false

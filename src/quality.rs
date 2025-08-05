@@ -20,7 +20,7 @@ impl FoldHasher {
     /// Initializes this [`FoldHasher`] with the given per-hasher seed and
     /// [`SharedSeed`].
     #[inline(always)]
-    pub fn with_seed(per_hasher_seed: u64, shared_seed: &SharedSeed) -> FoldHasher {
+    pub fn with_seed(per_hasher_seed: u64, shared_seed: &'static SharedSeed) -> FoldHasher {
         FoldHasher {
             inner: fast::FoldHasher::with_seed(per_hasher_seed, shared_seed),
         }

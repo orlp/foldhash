@@ -3,7 +3,7 @@
 use core::hash::{BuildHasher, Hasher};
 
 use crate::seed::{gen_per_hasher_seed, GlobalSeed, SharedSeed};
-use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rotate_right, ARBITRARY3};
+use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rapidhash_core_16_288, read_u32, read_u64, rotate_right, ARBITRARY3};
 
 /// A [`Hasher`] instance implementing foldhash, optimized for speed.
 ///
@@ -12,28 +12,22 @@ use crate::{folded_multiply, hash_bytes_long, hash_bytes_medium, rotate_right, A
 /// [`FixedState`] to create [`FoldHasher`]s.
 #[derive(Clone)]
 pub struct FoldHasher {
-    accumulator: u64,
+    pub(crate) accumulator: u64,
+    pub(crate) seeds: &'static [u64; 4],
     sponge: u128,
     sponge_len: u8,
-    fold_seed: u64,
-    expand_seed: u64,
-    expand_seed2: u64,
-    expand_seed3: u64,
 }
 
 impl FoldHasher {
     /// Initializes this [`FoldHasher`] with the given per-hasher seed and
     /// [`SharedSeed`].
     #[inline]
-    pub fn with_seed(per_hasher_seed: u64, shared_seed: &SharedSeed) -> FoldHasher {
+    pub fn with_seed(per_hasher_seed: u64, shared_seed: &'static SharedSeed) -> FoldHasher {
         FoldHasher {
             accumulator: per_hasher_seed,
+            seeds: &shared_seed.seeds,
             sponge: 0,
             sponge_len: 0,
-            fold_seed: shared_seed.seeds[0],
-            expand_seed: shared_seed.seeds[1],
-            expand_seed2: shared_seed.seeds[2],
-            expand_seed3: shared_seed.seeds[3],
         }
     }
 
@@ -43,7 +37,7 @@ impl FoldHasher {
         if self.sponge_len as usize + bits > 128 {
             let lo = self.sponge as u64;
             let hi = (self.sponge >> 64) as u64;
-            self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.fold_seed);
+            self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.seeds[0]);
             self.sponge = x.into();
             self.sponge_len = bits as u8;
         } else {
@@ -56,47 +50,44 @@ impl FoldHasher {
 impl Hasher for FoldHasher {
     #[inline(always)]
     fn write(&mut self, bytes: &[u8]) {
-        // We perform overlapping reads in the byte hash which could lead to
-        // trivial length-extension attacks. These should be defeated by
-        // adding a length-dependent rotation on our unpredictable seed
-        // which costs only a single cycle (or none if executed with
-        // instruction-level parallelism).
-        let len = bytes.len();
-        let base_seed = rotate_right(self.accumulator, len as u32);
-        if len <= 16 {
-            let mut s0 = base_seed;
-            let mut s1 = self.expand_seed;
+        let accumulator = self.accumulator;
+        let seeds = self.seeds;
+
+        // moving self.accumulator outside of this if block improves performance, I'm surprised the
+        // compiler can't do this automatically
+        self.accumulator = if bytes.len() <= 16 {
+            let mut s0 = 0;
+            let mut s1 = 0;
+
             // XOR the input into s0, s1, then multiply and fold.
-            if len >= 8 {
-                s0 ^= u64::from_ne_bytes(bytes[0..8].try_into().unwrap());
-                s1 ^= u64::from_ne_bytes(bytes[len - 8..].try_into().unwrap());
-            } else if len >= 4 {
-                s0 ^= u32::from_ne_bytes(bytes[0..4].try_into().unwrap()) as u64;
-                s1 ^= u32::from_ne_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
-            } else if len > 0 {
+            if bytes.len() >= 8 {
+                s0 = read_u64(bytes, 0);
+                s1 = read_u64(bytes, bytes.len() - 8);
+            } else if bytes.len() >= 4 {
+                s0 = read_u32(bytes, 0) as u64;
+                s1 = read_u32(bytes, bytes.len() - 4) as u64;
+            } else if bytes.len() > 0 {
                 let lo = bytes[0];
-                let mid = bytes[len / 2];
-                let hi = bytes[len - 1];
-                s0 ^= lo as u64;
-                s1 ^= ((hi as u64) << 8) | mid as u64;
+                let mid = bytes[bytes.len() / 2];
+                let hi = bytes[bytes.len() - 1];
+                s0 = hi as u64;
+                s1 = ((lo as u64) << 45) | mid as u64;
             }
-            self.accumulator = folded_multiply(s0, s1);
-        } else if len < 256 {
-            self.accumulator = hash_bytes_medium(
-                bytes,
-                base_seed,
-                base_seed.wrapping_add(self.expand_seed),
-                self.fold_seed,
-            );
+
+            // I prefer to wrapping add the length here, as not all platforms have a rotation, and
+            // although it has a smaller impact on the output hash, rapidhash's output quality and
+            // collision studies suggested this or an XOR are sufficient. Moving this to the bottom
+            // of the function appears to improve performance.
+            s0 ^= seeds[0];
+            s1 ^= rotate_right(accumulator, bytes.len() as u32);
+
+            folded_multiply(s0, s1)
+        } else if bytes.len() <= 288 {
+            // minimising the number of arguments, but self.accumulator and self.seeds can already
+            // be loaded into registers in this function, so passing them directly appears faster
+            rapidhash_core_16_288(accumulator, seeds, bytes)
         } else {
-            self.accumulator = hash_bytes_long(
-                bytes,
-                base_seed,
-                base_seed.wrapping_add(self.expand_seed),
-                base_seed.wrapping_add(self.expand_seed2),
-                base_seed.wrapping_add(self.expand_seed3),
-                self.fold_seed,
-            );
+            hash_bytes_long(accumulator, seeds, bytes)
         }
     }
 
@@ -124,7 +115,7 @@ impl Hasher for FoldHasher {
     fn write_u128(&mut self, i: u128) {
         let lo = i as u64;
         let hi = (i >> 64) as u64;
-        self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.fold_seed);
+        self.accumulator = folded_multiply(lo ^ self.accumulator, hi ^ self.seeds[0]);
     }
 
     #[inline(always)]
@@ -141,7 +132,7 @@ impl Hasher for FoldHasher {
         if self.sponge_len > 0 {
             let lo = self.sponge as u64;
             let hi = (self.sponge >> 64) as u64;
-            folded_multiply(lo ^ self.accumulator, hi ^ self.fold_seed)
+            folded_multiply(lo ^ self.accumulator, hi ^ self.seeds[0])
         } else {
             self.accumulator
         }

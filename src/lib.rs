@@ -114,6 +114,7 @@ pub use seed::SharedSeed;
 mod convenience;
 #[cfg(feature = "std")]
 pub use convenience::*;
+use crate::fast::FoldHasher;
 
 // Arbitrary constants with high entropy. Hexadecimal digits of pi were used.
 const ARBITRARY0: u64 = 0x243f6a8885a308d3;
@@ -220,6 +221,46 @@ const fn rotate_right(x: u64, r: u32) -> u64 {
     }
 }
 
+/// A helper method for doing an unaligned 32-bit read from a byte slice.
+#[inline(always)]
+fn read_u32(slice: &[u8], offset: usize) -> u32 {
+    // Uncomment the following to explicitly omit bounds checks for debugging:
+    // debug_assert!(offset as isize >= 0);
+    // debug_assert!(slice.len() >= 4 + offset);
+    // unsafe { core::ptr::read_unaligned(slice.as_ptr().offset(offset as isize) as *const u32) }
+
+    // Equivalent to slice[offset..offset+4].try_into().unwrap(), but const-friendly
+    let maybe_buf = slice.split_at(offset).1.first_chunk::<4>();
+    let buf = match maybe_buf {
+        Some(buf) => *buf,
+        None => panic!("read_u32: slice too short"),
+    };
+    u32::from_ne_bytes(buf)
+}
+
+/// A helper method for doing an unaligned 64-bit read from a byte slice.
+///
+/// This function is specifically implemented this way to allow the compiler
+/// to optimise away the bounds checks. The traditional approach of using
+/// `u64::from_ne_bytes(slice[offset..offset + 8].try_into().unwrap())` does
+/// not allow the compiler to fully optimise out the bounds checks for
+/// unknown reasons.
+#[inline(always)]
+fn read_u64(slice: &[u8], offset: usize) -> u64 {
+    // Uncomment the following to explicitly omit bounds checks for debugging:
+    // debug_assert!(offset as isize >= 0);
+    // debug_assert!(slice.len() >= 4 + offset);
+    // unsafe { core::ptr::read_unaligned(slice.as_ptr().offset(offset as isize) as *const u64) }
+
+    // equivalent to slice[offset..offset+8].try_into().unwrap(), but const-friendly
+    let maybe_buf = slice.split_at(offset).1.first_chunk::<8>();
+    let buf = match maybe_buf {
+        Some(buf) => *buf,
+        None => panic!("read_u64: slice too short"),
+    };
+    u64::from_ne_bytes(buf)
+}
+
 /// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.
 fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> u64 {
     // Process 32 bytes per iteration, 16 bytes from the start, 16 bytes from
@@ -246,17 +287,57 @@ fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> 
     s0 ^ s1
 }
 
+#[inline(never)]
+fn rapidhash_core_16_288(accumulator: u64, seeds: &[u64; 4], data: &[u8]) -> u64 {
+    let mut seed = accumulator;
+    let mut slice = data;
+
+    if slice.len() > 48 {
+        let mut see1 = seed;
+        let mut see2 = seed;
+
+        while slice.len() >= 48 {
+            seed = folded_multiply(read_u64(slice, 0) ^ seeds[1], read_u64(slice, 8) ^ seed);
+            see1 = folded_multiply(read_u64(slice, 16) ^ seeds[2], read_u64(slice, 24) ^ see1);
+            see2 = folded_multiply(read_u64(slice, 32) ^ seeds[3], read_u64(slice, 40) ^ see2);
+            let (_, split) = slice.split_at(48);
+            slice = split;
+        }
+
+        seed ^= see1 ^ see2;
+    }
+
+    if slice.len() > 16 {
+        seed = folded_multiply(read_u64(slice, 0) ^ seeds[1], read_u64(slice, 8) ^ seed);
+        if slice.len() > 32 {
+            seed = folded_multiply(read_u64(slice, 16) ^ seeds[2], read_u64(slice, 24) ^ seed);
+        }
+    }
+
+    let mut a = read_u64(data, data.len() - 16);
+    let mut b = read_u64(data, data.len() - 8);
+
+    seed = rotate_right(seed, data.len() as u32);
+    a ^= seeds[2];
+    b ^= seed;
+    folded_multiply(a, b)
+}
+
 /// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.
 #[cold]
 #[inline(never)]
 fn hash_bytes_long(
+    accumulator: u64,
+    seeds: &[u64; 4],
     bytes: &[u8],
-    mut s0: u64,
-    mut s1: u64,
-    mut s2: u64,
-    mut s3: u64,
-    fold_seed: u64,
 ) -> u64 {
+    let base_seed = rotate_right(accumulator, bytes.len() as u32);
+    let fold_seed = seeds[0];
+    let mut s0 = base_seed;
+    let mut s1 = base_seed.wrapping_add(seeds[1]);
+    let mut s2 = base_seed.wrapping_add(seeds[2]);
+    let mut s3 = base_seed.wrapping_add(seeds[3]);
+
     let chunks = bytes.chunks_exact(64);
     let remainder = chunks.remainder().len();
     for chunk in chunks {
