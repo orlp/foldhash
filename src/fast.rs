@@ -113,7 +113,7 @@ impl<'a> Hasher for FoldHasher<'a> {
 }
 
 /// A [`BuildHasher`] for [`fast::FoldHasher`](FoldHasher) that is randomly initialized.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct RandomState {
     per_hasher_seed: u64,
     global_seed: GlobalSeed,
@@ -143,7 +143,7 @@ impl BuildHasher for RandomState {
 ///
 /// This can be useful for e.g. testing, but the downside is that this type
 /// has a size of 16 bytes rather than the 8 bytes [`RandomState`] is.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct SeedableRandomState {
     per_hasher_seed: u64,
     shared_seed: &'static SharedSeed,
@@ -199,7 +199,7 @@ impl BuildHasher for SeedableRandomState {
 /// A [`BuildHasher`] for [`fast::FoldHasher`](FoldHasher) that always has the same fixed seed.
 ///
 /// Not recommended unless you absolutely need determinism.
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct FixedState {
     per_hasher_seed: u64,
 }
