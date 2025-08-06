@@ -220,8 +220,64 @@ const fn rotate_right(x: u64, r: u32) -> u64 {
     }
 }
 
-/// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.
-fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> u64 {
+/// Hashes strings <= 16 bytes, has unspecified behavior when bytes.len() < 16.
+#[inline(always)]
+fn hash_bytes_short(bytes: &[u8], accumulator: u64, seeds: &[u64; 4]) -> u64 {
+    let len = bytes.len();
+    let mut s0 = accumulator;
+    let mut s1 = seeds[1];
+    // XOR the input into s0, s1, then multiply and fold.
+    if len >= 8 {
+        s0 ^= u64::from_ne_bytes(bytes[0..8].try_into().unwrap());
+        s1 ^= u64::from_ne_bytes(bytes[len - 8..].try_into().unwrap());
+    } else if len >= 4 {
+        s0 ^= u32::from_ne_bytes(bytes[0..4].try_into().unwrap()) as u64;
+        s1 ^= u32::from_ne_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
+    } else if len > 0 {
+        let lo = bytes[0];
+        let mid = bytes[len / 2];
+        let hi = bytes[len - 1];
+        s0 ^= lo as u64;
+        s1 ^= ((hi as u64) << 8) | mid as u64;
+    }
+    folded_multiply(s0, s1)
+}
+
+/// Hashes strings > 16 bytes, has unspecified behavior when bytes.len() <= 16.
+#[cold]
+#[inline(never)]
+fn hash_bytes_long(mut bytes: &[u8], accumulator: u64, seeds: &[u64; 4]) -> u64 {
+    let mut s0 = accumulator;
+    let mut s1 = s0.wrapping_add(seeds[1]);
+    if bytes.len() >= 256 {
+        let mut s2 = s0.wrapping_add(seeds[2]);
+        let mut s3 = s0.wrapping_add(seeds[3]);
+        let chunks = bytes.chunks_exact(64);
+        let remainder = chunks.remainder().len();
+        for chunk in chunks {
+            let a = u64::from_ne_bytes(chunk[0..8].try_into().unwrap());
+            let b = u64::from_ne_bytes(chunk[8..16].try_into().unwrap());
+            let c = u64::from_ne_bytes(chunk[16..24].try_into().unwrap());
+            let d = u64::from_ne_bytes(chunk[24..32].try_into().unwrap());
+            let e = u64::from_ne_bytes(chunk[32..40].try_into().unwrap());
+            let f = u64::from_ne_bytes(chunk[40..48].try_into().unwrap());
+            let g = u64::from_ne_bytes(chunk[48..56].try_into().unwrap());
+            let h = u64::from_ne_bytes(chunk[56..64].try_into().unwrap());
+            s0 = folded_multiply(a ^ s0, e ^ seeds[0]);
+            s1 = folded_multiply(b ^ s1, f ^ seeds[0]);
+            s2 = folded_multiply(c ^ s2, g ^ seeds[0]);
+            s3 = folded_multiply(d ^ s3, h ^ seeds[0]);
+        }
+        s0 ^= s2;
+        s1 ^= s3;
+
+        if remainder > 0 {
+            bytes = &bytes[bytes.len() - remainder.max(16)..];
+        } else {
+            return s0 ^ s1;
+        }
+    }
+
     // Process 32 bytes per iteration, 16 bytes from the start, 16 bytes from
     // the end. On the last iteration these two chunks can overlap, but that is
     // perfectly fine.
@@ -239,46 +295,9 @@ fn hash_bytes_medium(bytes: &[u8], mut s0: u64, mut s1: u64, fold_seed: u64) -> 
         let b = u64::from_ne_bytes(lo[8..16].try_into().unwrap());
         let c = u64::from_ne_bytes(hi[0..8].try_into().unwrap());
         let d = u64::from_ne_bytes(hi[8..16].try_into().unwrap());
-        s0 = folded_multiply(a ^ s0, c ^ fold_seed);
-        s1 = folded_multiply(b ^ s1, d ^ fold_seed);
+        s0 = folded_multiply(a ^ s0, c ^ seeds[0]);
+        s1 = folded_multiply(b ^ s1, d ^ seeds[0]);
     }
 
     s0 ^ s1
-}
-
-/// Hashes strings >= 16 bytes, has unspecified behavior when bytes.len() < 16.
-#[cold]
-#[inline(never)]
-fn hash_bytes_long(
-    bytes: &[u8],
-    mut s0: u64,
-    mut s1: u64,
-    mut s2: u64,
-    mut s3: u64,
-    fold_seed: u64,
-) -> u64 {
-    let chunks = bytes.chunks_exact(64);
-    let remainder = chunks.remainder().len();
-    for chunk in chunks {
-        let a = u64::from_ne_bytes(chunk[0..8].try_into().unwrap());
-        let b = u64::from_ne_bytes(chunk[8..16].try_into().unwrap());
-        let c = u64::from_ne_bytes(chunk[16..24].try_into().unwrap());
-        let d = u64::from_ne_bytes(chunk[24..32].try_into().unwrap());
-        let e = u64::from_ne_bytes(chunk[32..40].try_into().unwrap());
-        let f = u64::from_ne_bytes(chunk[40..48].try_into().unwrap());
-        let g = u64::from_ne_bytes(chunk[48..56].try_into().unwrap());
-        let h = u64::from_ne_bytes(chunk[56..64].try_into().unwrap());
-        s0 = folded_multiply(a ^ s0, e ^ fold_seed);
-        s1 = folded_multiply(b ^ s1, f ^ fold_seed);
-        s2 = folded_multiply(c ^ s2, g ^ fold_seed);
-        s3 = folded_multiply(d ^ s3, h ^ fold_seed);
-    }
-    s0 ^= s2;
-    s1 ^= s3;
-
-    if remainder > 0 {
-        hash_bytes_medium(&bytes[bytes.len() - remainder.max(16)..], s0, s1, fold_seed)
-    } else {
-        s0 ^ s1
-    }
 }

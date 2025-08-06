@@ -12,22 +12,22 @@ use crate::{fast, folded_multiply, ARBITRARY0, ARBITRARY8};
 /// most likely want to use [`RandomState`], [`SeedableRandomState`] or
 /// [`FixedState`] to create [`FoldHasher`]s.
 #[derive(Clone)]
-pub struct FoldHasher {
-    pub(crate) inner: fast::FoldHasher,
+pub struct FoldHasher<'a> {
+    pub(crate) inner: fast::FoldHasher<'a>,
 }
 
-impl FoldHasher {
+impl<'a> FoldHasher<'a> {
     /// Initializes this [`FoldHasher`] with the given per-hasher seed and
     /// [`SharedSeed`].
     #[inline(always)]
-    pub fn with_seed(per_hasher_seed: u64, shared_seed: &SharedSeed) -> FoldHasher {
+    pub fn with_seed(per_hasher_seed: u64, shared_seed: &'a SharedSeed) -> FoldHasher<'a> {
         FoldHasher {
             inner: fast::FoldHasher::with_seed(per_hasher_seed, shared_seed),
         }
     }
 }
 
-impl Hasher for FoldHasher {
+impl<'a> Hasher for FoldHasher<'a> {
     #[inline(always)]
     fn write(&mut self, bytes: &[u8]) {
         self.inner.write(bytes);
@@ -76,10 +76,10 @@ pub struct RandomState {
 }
 
 impl BuildHasher for RandomState {
-    type Hasher = FoldHasher;
+    type Hasher = FoldHasher<'static>;
 
     #[inline(always)]
-    fn build_hasher(&self) -> FoldHasher {
+    fn build_hasher(&self) -> FoldHasher<'static> {
         FoldHasher {
             inner: self.inner.build_hasher(),
         }
@@ -130,10 +130,10 @@ impl SeedableRandomState {
 }
 
 impl BuildHasher for SeedableRandomState {
-    type Hasher = FoldHasher;
+    type Hasher = FoldHasher<'static>;
 
     #[inline(always)]
-    fn build_hasher(&self) -> FoldHasher {
+    fn build_hasher(&self) -> FoldHasher<'static> {
         FoldHasher {
             inner: self.inner.build_hasher(),
         }
@@ -163,10 +163,10 @@ impl FixedState {
 }
 
 impl BuildHasher for FixedState {
-    type Hasher = FoldHasher;
+    type Hasher = FoldHasher<'static>;
 
     #[inline(always)]
-    fn build_hasher(&self) -> FoldHasher {
+    fn build_hasher(&self) -> FoldHasher<'static> {
         FoldHasher {
             inner: self.inner.build_hasher(),
         }
