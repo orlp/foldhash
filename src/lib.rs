@@ -248,9 +248,8 @@ fn hash_bytes_short(bytes: &[u8], accumulator: u64, seeds: &[u64; 6]) -> u64 {
     folded_multiply(s0, s1)
 }
 
-
 /// Load 8 bytes into a u64 word at the given offset.
-/// 
+///
 /// # Safety
 /// You must ensure that offset + 8 <= bytes.len().
 #[inline(always)]
@@ -262,7 +261,7 @@ unsafe fn load(bytes: &[u8], offset: usize) -> u64 {
 }
 
 /// Hashes strings > 16 bytes.
-/// 
+///
 /// # Safety
 /// v.len() must be > 16 bytes.
 #[cold]
@@ -283,8 +282,8 @@ unsafe fn hash_bytes_long(mut v: &[u8], accumulator: u64, seeds: &[u64; 6]) -> u
             loop {
                 unsafe {
                     // SAFETY: we checked the length is > 256, we index at most v[..96].
-                    s0 = folded_multiply(load(v, 0) ^ s0,  load(v, 48) ^ seeds[0]);
-                    s1 = folded_multiply(load(v, 8) ^ s1,  load(v, 56) ^ seeds[0]);
+                    s0 = folded_multiply(load(v, 0) ^ s0, load(v, 48) ^ seeds[0]);
+                    s1 = folded_multiply(load(v, 8) ^ s1, load(v, 56) ^ seeds[0]);
                     s2 = folded_multiply(load(v, 16) ^ s2, load(v, 64) ^ seeds[0]);
                     s3 = folded_multiply(load(v, 24) ^ s3, load(v, 72) ^ seeds[0]);
                     s4 = folded_multiply(load(v, 32) ^ s4, load(v, 80) ^ seeds[0]);

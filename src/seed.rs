@@ -3,8 +3,8 @@
 use crate::{ARBITRARY1, ARBITRARY5};
 
 use super::{
-    folded_multiply, ARBITRARY10, ARBITRARY11, ARBITRARY2, ARBITRARY6,
-    ARBITRARY7, ARBITRARY8, ARBITRARY9,
+    folded_multiply, ARBITRARY10, ARBITRARY11, ARBITRARY2, ARBITRARY6, ARBITRARY7, ARBITRARY8,
+    ARBITRARY9,
 };
 
 /// Used for FixedState, and RandomState if atomics for dynamic init are unavailable.
