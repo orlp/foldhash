@@ -21,12 +21,12 @@ nightly = []
 
 [dev-dependencies]
 criterion = "0.5"
-hashbrown = "0.14"
+hashbrown = "0.15"
 uuid = "1.8"
 rand = "0.8"
 ahash = "0.8"
 fxhash = "0.2"
-rapidhash = "3.0.0"
+rapidhash = "3.1.0"
 chrono = "0.4"
 
 [lib]
