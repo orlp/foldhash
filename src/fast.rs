@@ -15,7 +15,7 @@ pub struct FoldHasher<'a> {
     accumulator: u64,
     sponge: u128,
     sponge_len: u8,
-    seeds: &'a [u64; 4],
+    seeds: &'a [u64; 8],
 }
 
 impl<'a> FoldHasher<'a> {

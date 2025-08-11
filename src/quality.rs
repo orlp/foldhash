@@ -4,7 +4,7 @@ use core::hash::{BuildHasher, Hasher};
 
 use crate::seed::SharedSeed;
 
-use crate::{fast, folded_multiply, ARBITRARY0, ARBITRARY8};
+use crate::{fast, folded_multiply, ARBITRARY0, ARBITRARY4};
 
 /// A [`Hasher`] instance implementing foldhash, optimized for quality.
 ///
@@ -122,7 +122,7 @@ impl SeedableRandomState {
             // the quality hash to ensure better independence between seed
             // and hash.
             inner: fast::SeedableRandomState::with_seed(
-                folded_multiply(per_hasher_seed, ARBITRARY8),
+                folded_multiply(per_hasher_seed, ARBITRARY4),
                 shared_seed,
             ),
         }
@@ -157,7 +157,7 @@ impl FixedState {
             // the quality hash to ensure better independence between seed
             // and hash. If the seed is zero the folded multiply is zero,
             // preserving with_seed(0) == default().
-            inner: fast::FixedState::with_seed(folded_multiply(per_hasher_seed, ARBITRARY8)),
+            inner: fast::FixedState::with_seed(folded_multiply(per_hasher_seed, ARBITRARY4)),
         }
     }
 }

@@ -41,5 +41,12 @@ name = "avalanche"
 path = "benches/avalanche.rs"
 harness = false
 
+[[bench]]
+name = "small_str"
+path = "benches/small_str.rs"
+harness = false
+
 [profile.release]
 lto = "thin"
+# codegen-units = 1
+# incremental = false
