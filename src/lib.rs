@@ -101,8 +101,18 @@
 //!    [`RandomState`](fast::RandomState) by default but can be seeded in any manner.
 //!    This state must include an explicit reference to a [`SharedSeed`], and thus
 //!    this struct is 16 bytes as opposed to just 8 bytes for the previous two.
+//!
+//! ## Features
+//!
+//! This crate has the following features:
+//! - `nightly`, this feature improves string hashing performance
+//! slightly using the nightly-only Rust feature
+//! [`hasher_prefixfree_extras`](https://github.com/rust-lang/rust/issues/96762),
+//! - `std`, this enabled-by-default feature offers convenient aliases for `std`
+//! containers, but can be turned off for `#![no_std]` crates.
 
 #![cfg_attr(all(not(test), not(feature = "std")), no_std)]
+#![cfg_attr(feature = "nightly", feature(hasher_prefixfree_extras))]
 #![warn(missing_docs)]
 
 pub mod fast;

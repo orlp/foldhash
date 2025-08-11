@@ -103,6 +103,13 @@ impl<'a> Hasher for FoldHasher<'a> {
         self.write_num(i as u64);
     }
 
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn write_str(&mut self, s: &str) {
+        // Our write function already handles length differences.
+        self.write(s.as_bytes())
+    }
+
     #[inline(always)]
     fn finish(&self) -> u64 {
         if self.sponge_len > 0 {

@@ -63,6 +63,12 @@ impl<'a> Hasher for FoldHasher<'a> {
         self.inner.write_usize(i);
     }
 
+    #[cfg(feature = "nightly")]
+    #[inline(always)]
+    fn write_str(&mut self, s: &str) {
+        self.inner.write_str(s);
+    }
+
     #[inline(always)]
     fn finish(&self) -> u64 {
         folded_multiply(self.inner.finish(), ARBITRARY0)
