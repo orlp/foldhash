@@ -126,6 +126,8 @@ const ARBITRARY6: u64 = 0xc0ac29b7c97c50dd;
 const ARBITRARY7: u64 = 0x3f84d5b5b5470917;
 const ARBITRARY8: u64 = 0x9216d5d98979fb1b;
 const ARBITRARY9: u64 = 0xd1310ba698dfb5ac;
+const ARBITRARY10: u64 = 0x2ffd72dbd01adfb7;
+const ARBITRARY11: u64 = 0xb8e1afed6a267e96;
 
 #[inline(always)]
 const fn folded_multiply(x: u64, y: u64) -> u64 {
@@ -220,9 +222,12 @@ const fn rotate_right(x: u64, r: u32) -> u64 {
     }
 }
 
-/// Hashes strings <= 16 bytes, has unspecified behavior when bytes.len() < 16.
+#[cold]
+fn cold_path() {}
+
+/// Hashes strings <= 16 bytes, has unspecified behavior when bytes.len() > 16.
 #[inline(always)]
-fn hash_bytes_short(bytes: &[u8], accumulator: u64, seeds: &[u64; 4]) -> u64 {
+fn hash_bytes_short(bytes: &[u8], accumulator: u64, seeds: &[u64; 6]) -> u64 {
     let len = bytes.len();
     let mut s0 = accumulator;
     let mut s1 = seeds[1];
@@ -243,61 +248,93 @@ fn hash_bytes_short(bytes: &[u8], accumulator: u64, seeds: &[u64; 4]) -> u64 {
     folded_multiply(s0, s1)
 }
 
-/// Hashes strings > 16 bytes, has unspecified behavior when bytes.len() <= 16.
+/// Load 8 bytes into a u64 word at the given offset.
+///
+/// # Safety
+/// You must ensure that offset + 8 <= bytes.len().
+#[inline(always)]
+unsafe fn load(bytes: &[u8], offset: usize) -> u64 {
+    // In most (but not all) cases this unsafe code is not necessary to avoid
+    // the bounds checks in the below code, but the register allocation became
+    // worse if I replaced those calls which could be replaced with safe code.
+    unsafe { bytes.as_ptr().add(offset).cast::<u64>().read_unaligned() }
+}
+
+/// Hashes strings > 16 bytes.
+///
+/// # Safety
+/// v.len() must be > 16 bytes.
 #[cold]
 #[inline(never)]
-fn hash_bytes_long(mut bytes: &[u8], accumulator: u64, seeds: &[u64; 4]) -> u64 {
+unsafe fn hash_bytes_long(mut v: &[u8], accumulator: u64, seeds: &[u64; 6]) -> u64 {
     let mut s0 = accumulator;
     let mut s1 = s0.wrapping_add(seeds[1]);
-    if bytes.len() >= 256 {
+
+    if v.len() > 128 {
+        cold_path();
         let mut s2 = s0.wrapping_add(seeds[2]);
         let mut s3 = s0.wrapping_add(seeds[3]);
-        let chunks = bytes.chunks_exact(64);
-        let remainder = chunks.remainder().len();
-        for chunk in chunks {
-            let a = u64::from_ne_bytes(chunk[0..8].try_into().unwrap());
-            let b = u64::from_ne_bytes(chunk[8..16].try_into().unwrap());
-            let c = u64::from_ne_bytes(chunk[16..24].try_into().unwrap());
-            let d = u64::from_ne_bytes(chunk[24..32].try_into().unwrap());
-            let e = u64::from_ne_bytes(chunk[32..40].try_into().unwrap());
-            let f = u64::from_ne_bytes(chunk[40..48].try_into().unwrap());
-            let g = u64::from_ne_bytes(chunk[48..56].try_into().unwrap());
-            let h = u64::from_ne_bytes(chunk[56..64].try_into().unwrap());
-            s0 = folded_multiply(a ^ s0, e ^ seeds[0]);
-            s1 = folded_multiply(b ^ s1, f ^ seeds[0]);
-            s2 = folded_multiply(c ^ s2, g ^ seeds[0]);
-            s3 = folded_multiply(d ^ s3, h ^ seeds[0]);
+
+        if v.len() > 256 {
+            cold_path();
+            let mut s4 = s0.wrapping_add(seeds[4]);
+            let mut s5 = s0.wrapping_add(seeds[5]);
+            loop {
+                unsafe {
+                    // SAFETY: we checked the length is > 256, we index at most v[..96].
+                    s0 = folded_multiply(load(v, 0) ^ s0, load(v, 48) ^ seeds[0]);
+                    s1 = folded_multiply(load(v, 8) ^ s1, load(v, 56) ^ seeds[0]);
+                    s2 = folded_multiply(load(v, 16) ^ s2, load(v, 64) ^ seeds[0]);
+                    s3 = folded_multiply(load(v, 24) ^ s3, load(v, 72) ^ seeds[0]);
+                    s4 = folded_multiply(load(v, 32) ^ s4, load(v, 80) ^ seeds[0]);
+                    s5 = folded_multiply(load(v, 40) ^ s5, load(v, 88) ^ seeds[0]);
+                }
+                v = &v[96..];
+                if v.len() <= 256 {
+                    break;
+                }
+            }
+            s0 ^= s4;
+            s1 ^= s5;
+        }
+
+        loop {
+            unsafe {
+                // SAFETY: we checked the length is > 128, we index at most v[..64].
+                s0 = folded_multiply(load(v, 0) ^ s0, load(v, 32) ^ seeds[0]);
+                s1 = folded_multiply(load(v, 8) ^ s1, load(v, 40) ^ seeds[0]);
+                s2 = folded_multiply(load(v, 16) ^ s2, load(v, 48) ^ seeds[0]);
+                s3 = folded_multiply(load(v, 24) ^ s3, load(v, 56) ^ seeds[0]);
+            }
+            v = &v[64..];
+            if v.len() <= 128 {
+                break;
+            }
         }
         s0 ^= s2;
         s1 ^= s3;
-
-        if remainder > 0 {
-            bytes = &bytes[bytes.len() - remainder.max(16)..];
-        } else {
-            return s0 ^ s1;
-        }
     }
 
-    // Process 32 bytes per iteration, 16 bytes from the start, 16 bytes from
-    // the end. On the last iteration these two chunks can overlap, but that is
-    // perfectly fine.
-    let left_to_right = bytes.chunks_exact(16);
-    let mut right_to_left = bytes.rchunks_exact(16);
-    for lo in left_to_right {
-        let hi = right_to_left.next().unwrap();
-        let unconsumed_start = lo.as_ptr();
-        let unconsumed_end = hi.as_ptr_range().end;
-        if unconsumed_start >= unconsumed_end {
-            break;
+    let len = v.len();
+    unsafe {
+        // SAFETY: our precondition ensures our length is at least 16, and the
+        // above loops do not reduce the length under that. This protects our
+        // first iteration of this loop, the further iterations are protected
+        // directly by the checks on len.
+        s0 = folded_multiply(load(v, 0) ^ s0, load(v, len - 16) ^ seeds[0]);
+        s1 = folded_multiply(load(v, 8) ^ s1, load(v, len - 8) ^ seeds[0]);
+        if len >= 32 {
+            s0 = folded_multiply(load(v, 16) ^ s0, load(v, len - 32) ^ seeds[0]);
+            s1 = folded_multiply(load(v, 24) ^ s1, load(v, len - 24) ^ seeds[0]);
+            if len >= 64 {
+                s0 = folded_multiply(load(v, 32) ^ s0, load(v, len - 48) ^ seeds[0]);
+                s1 = folded_multiply(load(v, 40) ^ s1, load(v, len - 40) ^ seeds[0]);
+                if len >= 96 {
+                    s0 = folded_multiply(load(v, 48) ^ s0, load(v, len - 64) ^ seeds[0]);
+                    s1 = folded_multiply(load(v, 56) ^ s1, load(v, len - 56) ^ seeds[0]);
+                }
+            }
         }
-
-        let a = u64::from_ne_bytes(lo[0..8].try_into().unwrap());
-        let b = u64::from_ne_bytes(lo[8..16].try_into().unwrap());
-        let c = u64::from_ne_bytes(hi[0..8].try_into().unwrap());
-        let d = u64::from_ne_bytes(hi[8..16].try_into().unwrap());
-        s0 = folded_multiply(a ^ s0, c ^ seeds[0]);
-        s1 = folded_multiply(b ^ s1, d ^ seeds[0]);
     }
-
     s0 ^ s1
 }

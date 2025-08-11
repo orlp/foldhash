@@ -15,7 +15,7 @@ pub struct FoldHasher<'a> {
     accumulator: u64,
     sponge: u128,
     sponge_len: u8,
-    seeds: &'a [u64; 4],
+    seeds: &'a [u64; 6],
 }
 
 impl<'a> FoldHasher<'a> {
@@ -60,7 +60,10 @@ impl<'a> Hasher for FoldHasher<'a> {
         if len <= 16 {
             self.accumulator = hash_bytes_short(bytes, self.accumulator, self.seeds);
         } else {
-            self.accumulator = hash_bytes_long(bytes, self.accumulator, self.seeds);
+            unsafe {
+                // SAFETY: we checked that the length is > 16 bytes.
+                self.accumulator = hash_bytes_long(bytes, self.accumulator, self.seeds);
+            }
         }
     }
 
