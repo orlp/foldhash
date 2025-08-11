@@ -15,6 +15,7 @@ rust-version = "1.60"
 [features]
 default = ["std"]
 std = []
+nightly = []
 
 [dependencies]
 
