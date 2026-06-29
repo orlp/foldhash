@@ -56,7 +56,10 @@ pub(crate) fn gen_per_hasher_seed() -> u64 {
     // problematic contention.
     //
     // We use usize instead of 64-bit atomics for best platform support.
-    #[cfg(not(feature = "std"))]
+    //
+    // If the target has no atomic support, then the seed will have no further
+    // nondeterminism added.
+    #[cfg(all(not(feature = "std"), target_has_atomic = "ptr"))]
     {
         use core::sync::atomic::{AtomicUsize, Ordering};
         static PER_HASHER_NONDETERMINISM: AtomicUsize = AtomicUsize::new(0);
