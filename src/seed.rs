@@ -33,14 +33,18 @@ pub(crate) fn gen_per_hasher_seed() -> u64 {
     #[cfg(feature = "std")]
     {
         use std::cell::Cell;
+
         thread_local! {
             static PER_HASHER_NONDETERMINISM: Cell<u64> = const { Cell::new(0) };
         }
 
         PER_HASHER_NONDETERMINISM.with(|cell| {
-            let nondeterminism = cell.get();
+            let mut nondeterminism = cell.get();
+            if nondeterminism == 0 {
+                nondeterminism = get_entropy();
+            }
             per_hasher_seed = folded_multiply(per_hasher_seed, ARBITRARY1 ^ nondeterminism);
-            cell.set(per_hasher_seed);
+            cell.set(per_hasher_seed.max(1)); // Avoid re-init by remapping 0.
         })
     };
 
@@ -134,53 +138,82 @@ impl SharedSeed {
     }
 }
 
+#[cold]
+#[inline(never)]
+fn get_entropy() -> u64 {
+    let mix = |seed: u64, x: u64| folded_multiply(seed ^ x, ARBITRARY5);
+
+    // Use address space layout randomization as our main randomness source.
+    // This isn't great, but we don't advertise HashDoS resistance in the first
+    // place. This is a whole lot better than nothing, at near zero cost with
+    // no dependencies.
+    static DUMMY: u8 = 0;
+    let mut seed = 0;
+    let stack_ptr = &seed as *const _;
+    let func_ptr = get_entropy as *const ();
+    let static_ptr = &DUMMY as *const _;
+    seed = mix(seed, stack_ptr as usize as u64);
+    seed = mix(seed, func_ptr as usize as u64);
+    seed = mix(seed, static_ptr as usize as u64);
+
+    // If we have the standard library available, augment entropy with the
+    // current time, an address from the allocator and the current thread id. We
+    // swallow any panics, simply not using that source of entropy should it
+    // fail for whatever reason.
+    #[cfg(feature = "std")]
+    {
+        use std::hash::BuildHasher;
+
+        #[cfg(not(any(
+            miri,
+            all(target_family = "wasm", target_os = "unknown"),
+            target_os = "zkvm"
+        )))]
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if let Ok(duration) = std::time::UNIX_EPOCH.elapsed() {
+                seed = mix(seed, duration.subsec_nanos() as u64);
+                seed = mix(seed, duration.as_secs());
+            }
+        }));
+
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let box_ptr = &*Box::new(0u8) as *const _;
+            seed = mix(seed, box_ptr as usize as u64);
+        }));
+
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // We use the hash of the thread ID since that's the only stable way
+            // to extract information about the thread ID.
+            let thread_id = std::thread::current().id();
+            let fixed = crate::quality::FixedState::default();
+            seed = mix(seed, fixed.hash_one(thread_id));
+        }));
+    }
+
+    // Keep global state such that consecutive calls are likely to return
+    // different numbers, even if all the above entropy sources failed to
+    // provide differences.
+    #[cfg(target_has_atomic = "ptr")]
+    {
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        static GLOBAL_NONDETERMINISM: AtomicUsize = AtomicUsize::new(0);
+
+        let nondeterminism = GLOBAL_NONDETERMINISM.load(Ordering::Relaxed) as u64;
+        seed = folded_multiply(seed, ARBITRARY1 ^ nondeterminism);
+        GLOBAL_NONDETERMINISM.store(seed as usize, Ordering::Relaxed);
+    }
+
+    // Final mixing.
+    seed = mix(seed, 0);
+    seed = mix(seed, 0);
+    mix(seed, 0)
+}
+
 #[cfg(target_has_atomic = "8")]
 mod global {
     use super::*;
     use core::cell::UnsafeCell;
     use core::sync::atomic::{AtomicU8, Ordering};
-
-    fn generate_global_seed() -> SharedSeed {
-        let mix = |seed: u64, x: u64| folded_multiply(seed ^ x, ARBITRARY5);
-
-        // Use address space layout randomization as our main randomness source.
-        // This isn't great, but we don't advertise HashDoS resistance in the first
-        // place. This is a whole lot better than nothing, at near zero cost with
-        // no dependencies.
-        let mut seed = 0;
-        let stack_ptr = &seed as *const _;
-        let func_ptr = generate_global_seed;
-        let static_ptr = &GLOBAL_SEED_STORAGE as *const _;
-        seed = mix(seed, stack_ptr as usize as u64);
-        seed = mix(seed, func_ptr as *const () as usize as u64);
-        seed = mix(seed, static_ptr as usize as u64);
-
-        // If we have the standard library available, augment entropy with the
-        // current time and an address from the allocator. We swallow any
-        // panics, simply not using that source of entropy should it fail for
-        // whatever reason.
-        #[cfg(feature = "std")]
-        {
-            #[cfg(not(any(
-                miri,
-                all(target_family = "wasm", target_os = "unknown"),
-                target_os = "zkvm"
-            )))]
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                if let Ok(duration) = std::time::UNIX_EPOCH.elapsed() {
-                    seed = mix(seed, duration.subsec_nanos() as u64);
-                    seed = mix(seed, duration.as_secs());
-                }
-            }));
-
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let box_ptr = &*Box::new(0u8) as *const _;
-                seed = mix(seed, box_ptr as usize as u64);
-            }));
-        }
-
-        SharedSeed::from_u64(seed)
-    }
 
     // Now all the below code purely exists to cache the above seed as
     // efficiently as possible. Even if we weren't a no_std crate and had access to
@@ -231,7 +264,7 @@ mod global {
         #[inline(never)]
         fn init_slow() {
             // Generate seed outside of critical section.
-            let seed = generate_global_seed();
+            let seed = SharedSeed::from_u64(get_entropy());
 
             loop {
                 match GLOBAL_SEED_STORAGE.state.compare_exchange_weak(
