@@ -156,7 +156,9 @@ mod global {
         seed = mix(seed, static_ptr as usize as u64);
 
         // If we have the standard library available, augment entropy with the
-        // current time and an address from the allocator.
+        // current time and an address from the allocator. We swallow any
+        // panics, simply not using that source of entropy should it fail for
+        // whatever reason.
         #[cfg(feature = "std")]
         {
             #[cfg(not(any(
@@ -164,13 +166,17 @@ mod global {
                 all(target_family = "wasm", target_os = "unknown"),
                 target_os = "zkvm"
             )))]
-            if let Ok(duration) = std::time::UNIX_EPOCH.elapsed() {
-                seed = mix(seed, duration.subsec_nanos() as u64);
-                seed = mix(seed, duration.as_secs());
-            }
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if let Ok(duration) = std::time::UNIX_EPOCH.elapsed() {
+                    seed = mix(seed, duration.subsec_nanos() as u64);
+                    seed = mix(seed, duration.as_secs());
+                }
+            }));
 
-            let box_ptr = &*Box::new(0u8) as *const _;
-            seed = mix(seed, box_ptr as usize as u64);
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let box_ptr = &*Box::new(0u8) as *const _;
+                seed = mix(seed, box_ptr as usize as u64);
+            }));
         }
 
         SharedSeed::from_u64(seed)
