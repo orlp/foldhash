@@ -162,7 +162,7 @@ fn get_entropy() -> u64 {
     // fail for whatever reason.
     #[cfg(feature = "std")]
     {
-        use std::hash::BuildHasher;
+        use std::hash::{BuildHasher, Hash, Hasher};
 
         #[cfg(not(any(
             miri,
@@ -185,8 +185,9 @@ fn get_entropy() -> u64 {
             // We use the hash of the thread ID since that's the only stable way
             // to extract information about the thread ID.
             let thread_id = std::thread::current().id();
-            let fixed = crate::quality::FixedState::default();
-            seed = mix(seed, fixed.hash_one(thread_id));
+            let mut hasher = crate::quality::FixedState::default().build_hasher();
+            thread_id.hash(&mut hasher);
+            seed = mix(seed, hasher.finish());
         }));
     }
 
